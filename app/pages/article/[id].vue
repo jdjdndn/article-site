@@ -82,29 +82,44 @@ function trackClick(l: any) {
   } catch { /* 上报失败不影响跳转 */ }
 }
 
-// 分享：优先系统分享（移动端），否则复制链接（微信/QQ 直接粘贴）
+// 分享：仅移动端优先系统分享；桌面端直接复制链接（微信/QQ 里粘贴）。
+// 复制失败给可见提示 + 可长按手动复制的链接（避免"闪一下无事发生"）。
 const shareDone = ref(false)
+const copyFail = ref('')
 async function copyLink() {
   const url = `https://www.wcbblll.cc/article/${id.value}`
-  try {
-    if (navigator.share) {
+  copyFail.value = ''
+  // 1) 移动端系统分享
+  if (/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) && navigator.share) {
+    try {
       await navigator.share({ title: data.value?.article?.title, url })
       return
-    }
-  } catch { /* 用户取消分享不报错 */ }
+    } catch { /* 用户取消分享：继续尝试复制 */ }
+  }
+  // 2) 剪贴板 API
   try {
     await navigator.clipboard.writeText(url)
     shareDone.value = true
     setTimeout(() => (shareDone.value = false), 2000)
-  } catch {
+    return
+  } catch { /* 继续兜底 */ }
+  // 3) 旧版 execCommand 兜底
+  try {
     const ta = document.createElement('textarea')
     ta.value = url
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
     document.body.appendChild(ta); ta.select()
-    document.execCommand('copy')
+    const ok = document.execCommand('copy')
     document.body.removeChild(ta)
-    shareDone.value = true
-    setTimeout(() => (shareDone.value = false), 2000)
-  }
+    if (ok) {
+      shareDone.value = true
+      setTimeout(() => (shareDone.value = false), 2000)
+      return
+    }
+  } catch { /* 继续 */ }
+  // 4) 真失败：给可见提示，链接可长按手动复制
+  copyFail.value = url
 }
 
 // GEO：JSON-LD（Article 全字段 + BreadcrumbList + FAQPage）
@@ -211,6 +226,11 @@ useHead(() => {
           @click="toggleFavorite"
         >{{ favorited ? '★ 已收藏' : '☆ 收藏' }}（{{ favoriteCount }}）</button>
         <button class="share-btn" @click="copyLink">{{ shareDone ? '✓ 已复制' : '🔗 分享' }}</button>
+      </div>
+      <div v-if="copyFail" class="copy-fail-tip">
+        <p>复制失败，请长按下面链接手动复制：</p>
+        <code>{{ copyFail }}</code>
+        <button class="tip-close" @click="copyFail = ''">知道了</button>
       </div>
 
       <!-- 正文（结构化块：text/h2/list/price/quote/ad/image，按模板布局） -->
@@ -394,6 +414,40 @@ useHead(() => {
   transition: all .2s;
 }
 .share-btn:hover { border-color: var(--primary); background: var(--primary-weak); }
+.copy-fail-tip {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  width: min(92vw, 420px);
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .15);
+  padding: 14px 16px;
+  z-index: 100;
+}
+.copy-fail-tip p { margin: 0 0 8px; font-size: 13px; color: var(--text); }
+.copy-fail-tip code {
+  display: block;
+  word-break: break-all;
+  font-size: 12px;
+  color: var(--primary);
+  background: var(--primary-weak);
+  border-radius: 8px;
+  padding: 8px 10px;
+  user-select: all;
+}
+.copy-fail-tip .tip-close {
+  margin-top: 10px;
+  padding: 6px 18px;
+  border-radius: 999px;
+  border: none;
+  background: var(--primary);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
 
 .more-wrap { position: relative; }
 .more-toggle {
@@ -409,20 +463,24 @@ useHead(() => {
 .more-toggle:hover { color: var(--primary); border-color: var(--primary); background: var(--primary-weak); }
 .more-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
   margin-top: 10px;
 }
 .more-link {
-  display: inline-block;
-  padding: 6px 14px;
-  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 10px;
   background: var(--primary-weak);
+  border: 1px solid #bfdbfe;
   color: var(--primary);
   text-decoration: none;
   font-size: 13px;
   transition: background .2s;
 }
+.more-link::after { content: '→'; color: var(--primary); opacity: .55; flex-shrink: 0; }
 .more-link:hover { background: #dbeafe; }
 
 .gone { text-align: center; padding: 48px 24px; margin-bottom: 22px; }

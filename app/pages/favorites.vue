@@ -27,6 +27,15 @@ onMounted(async () => {
   }
 })
 
+async function removeFav(id: string) {
+  try {
+    await $fetch(`/api/articles/${id}/favorite`, { method: 'POST', body: { fp: getFp(), action: 'remove' } })
+    list.value = list.value.filter((f: any) => f.id !== id)
+  } catch (e: any) {
+    alert(e?.data?.statusMessage || '取消失败，请重试')
+  }
+}
+
 useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content: 'noindex, nofollow' }] })
 </script>
 
@@ -42,19 +51,17 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
     </div>
 
     <div v-else class="fav-list">
-      <NuxtLink
-        v-for="f in list"
-        :key="f.id"
-        :to="`/article/${f.id}`"
-        class="fav-item"
-      >
+      <div v-for="f in list" :key="f.id" class="fav-item">
         <div class="fav-head">
           <span class="cat">{{ f.category || '文章' }}</span>
           <span v-if="f.expiresAt" class="exp">⏰ {{ f.expiresAt }}</span>
+          <button class="unfav" @click="removeFav(f.id)">取消收藏</button>
         </div>
-        <div class="fav-title">{{ f.title }}</div>
-        <div class="fav-summary">{{ f.summary }}</div>
-      </NuxtLink>
+        <NuxtLink :to="`/article/${f.id}`" class="fav-body">
+          <div class="fav-title">{{ f.title }}</div>
+          <div class="fav-summary">{{ f.summary }}</div>
+        </NuxtLink>
+      </div>
     </div>
   </div>
 </template>
@@ -78,6 +85,20 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
 }
 .fav-item:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
 .fav-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.unfav {
+  margin-left: auto;
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all .2s;
+  flex-shrink: 0;
+}
+.unfav:hover { border-color: #f87171; color: #dc2626; background: #fef2f2; }
+.fav-body { display: block; text-decoration: none; }
 .cat {
   background: var(--primary-weak);
   color: var(--primary);
