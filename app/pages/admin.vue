@@ -203,7 +203,8 @@ function aiSystemPrompt(_tmpl: string): string {
 内容要求：template 为 guide → 至少 2 个 h2、步骤化 list、含避坑点；faq → text 段落为主、faq 至少 3 条且口语化；default → 2-3 个 text 段落 + 可 1 个 h2 + 1 个 list；deal → 选购攻略式（怎么选、适合谁、注意事项）+ 1 个 price 块 + 1 个 ad 软文块。文章结尾放 1 个 ad 软文块（label 如"去看看"，link 用素材里给的跳转链接；素材无链接就不放 ad）。
 links 保留素材给的全部跳转链接（label 可用"去看看/了解详情"等，不要堆"领券/抢购"这类带货词）。tags 3-5 个，faq 2-4 条。
 过期时间：引流文不写 expiresAt（攻略/经验类文章不过期）；仅当素材含明确的限时信息（如"活动截止 10 月 31 日"）才写 expiresAt。
-图片与视频：一律使用网络资源 URL（素材里给的图片/视频链接优先），渲染时标注来源网络；素材没有相关 URL 时**绝不编造图片或视频地址**（编造的死链会直接损坏阅读体验），宁可不放图也不放假链接。`
+图片与视频：一律使用网络资源 URL（素材里给的图片/视频链接优先），渲染时标注来源网络；素材没有相关 URL 时**绝不编造图片或视频地址**（编造的死链会直接损坏阅读体验），宁可不放图也不放假链接。
+合规红线：禁止出现"最/第一/全网唯一/绝无仅有/百分百/绝对"等极限词与绝对化承诺，禁止夸大功效、编造用户评价或虚假折扣信息；涉及价格只写素材里有的，不做"保价/最低价"承诺；不涉及医疗功效、金融收益、赌博、违禁品、运营商号卡套餐等高风险内容。`
 }
 
 // —— 批量录入流水线：粘贴 → 切分 → AI 逐条生成 → 勾选 → 批量入库 ——
@@ -833,7 +834,7 @@ if (key.value) loadList()
             <tr v-for="a in articles" :key="a.id">
               <td class="title-cell">
                 <NuxtLink :to="`/article/${a.id}`" target="_blank">{{ a.title }}</NuxtLink>
-                <div class="id">{{ a.id }}</div>
+                <div class="id"><span v-if="!a.linkCount" class="badge seed-warn">缺链接</span><span v-if="!a.hasImage" class="badge seed-mute">缺图</span>{{ a.id }}</div>
               </td>
               <td>{{ a.category }}</td>
               <td>
@@ -990,6 +991,10 @@ if (key.value) loadList()
             <div class="stat">
               <div class="num">{{ stats.byStatus?.draft || 0 }}</div>
               <div class="label">草稿</div>
+            </div>
+            <div class="stat">
+              <div class="num">{{ stats.pendingLinks || 0 }}</div>
+              <div class="label">待补链接</div>
             </div>
             <div class="stat">
               <div class="num">{{ stats.clicks }}</div>
@@ -1222,6 +1227,8 @@ if (key.value) loadList()
 .badge.seed-failed { background: #fff1f0; color: #fa541c; }
 .badge.seed-done { background: #f6ffed; color: #389e0d; }
 .badge.seed-ai { background: #f0f5ff; color: #722ed1; }
+.badge.seed-warn { background: #fffbe6; color: #d48806; }
+.badge.seed-mute { background: #f5f5f5; color: #8c8c8c; }
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-bottom: 22px; }
 .stat { background: #f9fafb; border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; }
 .stat .num { font-size: 26px; font-weight: 700; color: var(--primary); }

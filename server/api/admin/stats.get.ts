@@ -66,6 +66,12 @@ export default defineEventHandler(async (event) => {
     GROUP BY c.link_id ORDER BY n DESC LIMIT 15`)
   const topLinks = (linkRes.results || []) as { link_id: number; n: number; label: string | null; domain: string | null; url: string | null }[]
 
+  // 待补链接文章数（已发布且没有任何链接的引流文——运营提醒）
+  const [pendingLinksRow] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(articles)
+    .where(sql`status = 'published' AND NOT EXISTS (SELECT 1 FROM links l WHERE l.article_id = articles.id)`)
+
   // 待处理反馈数
   const [openReports] = await db
     .select({ n: sql<number>`count(*)` })
@@ -88,6 +94,7 @@ export default defineEventHandler(async (event) => {
     todaySearches: todaySearches?.n ?? 0,
     topSearches,
     expiringSoon,
+    pendingLinks: pendingLinksRow?.n ?? 0,
     openReports: openReports?.n ?? 0,
   }
 })

@@ -1,3 +1,10 @@
+<script setup lang="ts">
+useHead({
+  title: '关于本站 - AI 文章站',
+  link: [{ rel: 'canonical', href: 'https://www.wcbblll.cc/about' }],
+})
+</script>
+
 <template>
   <div class="card">
     <h1>关于本站</h1>

@@ -32,6 +32,8 @@ export default defineEventHandler(async (event) => {
       expiresAt: articles.expiresAt,
       updatedAt: articles.updatedAt,
       clicks: sql<number>`COALESCE((SELECT count(*) FROM click_logs c WHERE c.article_id = ${articles.id}), 0)`,
+      linkCount: sql<number>`COALESCE((SELECT count(*) FROM links l WHERE l.article_id = ${articles.id}), 0)`,
+      hasImage: sql<number>`CASE WHEN content LIKE '%"type":"image"%' THEN 1 ELSE 0 END`,
     })
     .from(articles)
     .where(and(...conds))

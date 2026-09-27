@@ -7,6 +7,7 @@ const router = useRouter()
 // GEO：站点级 WebSite + SearchAction（SiteLinksSearchBox，喂给搜索引擎和 AI 爬虫）
 useHead(() => ({
   title: 'AI 文章站 - 优惠攻略、好物推荐、副业指南',
+  link: [{ rel: 'canonical', href: 'https://www.wcbblll.cc/' }],
   meta: [
     { name: 'description', content: 'AI 文章站：实时优惠攻略、好物推荐、省钱技巧与副业指南，每日更新。' },
     { property: 'og:type', content: 'website' },

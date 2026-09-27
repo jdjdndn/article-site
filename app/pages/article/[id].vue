@@ -221,6 +221,7 @@ useHead(() => {
   }
   return {
     title: a.title,
+    link: [{ rel: 'canonical', href: url }],
     meta: [
       { name: 'description', content: a.summary },
       { property: 'og:type', content: 'article' },
