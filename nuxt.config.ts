@@ -44,9 +44,6 @@ export default defineNuxtConfig({
     public: {
       // 页面端校验占位；真实鉴权在 server 端（server/api/admin/*）
       manageKey: '',
-      // 开源评论系统：provider = artalk | waline | twikoo；server 为对应后端地址
-      commentProvider: 'waline',
-      commentServer: 'https://comments.wcbblll.cc'
     }
   }
 })

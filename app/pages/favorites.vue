@@ -98,7 +98,7 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
 .favorites { max-width: 720px; margin: 0 auto; padding: 28px 16px 48px; }
 .page-title { font-size: 22px; margin-bottom: 6px; color: var(--text); }
 .hint { color: var(--text-muted); font-size: 13px; margin-bottom: 20px; }
-.empty { text-align: center; color: var(--text-muted); padding: 48px 0; font-size: 14px; }
+.empty { text-align: center; color: var(--text-muted); padding: 10px 0; font-size: 14px; }
 .link { color: var(--primary); text-decoration: none; }
 .fav-list { display: flex; flex-direction: column; gap: 12px; }
 .fav-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }

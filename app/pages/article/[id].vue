@@ -375,7 +375,6 @@ useHead(() => {
           <span>这篇对你有用吗？</span>
           <button class="end-btn" :class="{ on: favorited }" @click="toggleFavorite">{{ favorited ? '★ 已收藏' : '☆ 收藏' }}</button>
           <button class="end-btn" @click="copyLink">{{ shareDone ? '✓ 已复制' : '🔗 分享' }}</button>
-          <a class="end-btn link" href="#comments" rel="nofollow">💬 去评论区聊聊</a>
         </div>
 
         <!-- 非 deal 模板：链接按钮放正文后 -->
@@ -422,9 +421,6 @@ useHead(() => {
           {{ r.title }}
         </NuxtLink>
       </section>
-
-      <!-- 评论（开源系统 Artalk/Waline/Twikoo，见 6.3） -->
-      <ArticleComments v-if="data.article.id" :article-id="data.article.id" />
 
       <!-- 底部友链 -->
       <section class="friend card">
@@ -780,7 +776,7 @@ useHead(() => {
 }
 .friend-links a:hover { background: #dbeafe; }
 
-.loading, .empty { text-align: center; color: var(--text-muted); padding: 48px 0; font-size: 14px; }
+.loading, .empty { text-align: center; color: var(--text-muted); padding: 10px 0; font-size: 14px; }
 
 @media (max-width: 600px) {
   .title { font-size: 19px; }

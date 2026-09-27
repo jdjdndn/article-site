@@ -575,7 +575,6 @@ if (key.value) loadList()
           <button :class="{ active: tab === 'seeds' }" @click="switchTab('seeds')">素材队列</button>
           <button :class="{ active: tab === 'stats' }" @click="switchTab('stats')">数据统计</button>
         </div>
-        <a class="ghost" href="https://comments.wcbblll.cc/ui" target="_blank" rel="noopener">评论管理 ↗</a>
         <button v-if="tab === 'list' && mode === 'list'" class="primary" @click="openCreate">＋ 新建文章</button>
         <button v-if="tab === 'list' && mode === 'list'" class="primary" @click="openBatch">⿇ 批量录入</button>
         <button v-if="mode !== 'list'" class="ghost" @click="mode = 'list'">← 返回列表</button>

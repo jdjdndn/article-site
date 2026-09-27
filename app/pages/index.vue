@@ -182,8 +182,8 @@ async function submitTopic() {
         </div>
       </NuxtLink>
 
-      <div class="pager">
-        <button :disabled="!data.hasMore" @click="loadMore">加载更多</button>
+      <div v-if="data.hasMore" class="pager">
+        <button @click="loadMore">加载更多</button>
       </div>
     </div>
     <div v-else class="empty">
@@ -340,7 +340,7 @@ async function submitTopic() {
 .pager button:hover:not(:disabled) { color: #fff; background: linear-gradient(180deg, var(--primary), var(--primary-strong)); border-color: transparent; }
 .pager button:disabled { opacity: .5; cursor: not-allowed; }
 
-.loading, .empty { text-align: center; color: var(--text-muted); padding: 48px 0; font-size: 14px; }
+.loading, .empty { text-align: center; color: var(--text-muted); padding: 10px 0; font-size: 14px; }
 .topic-submit { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
 .topic-submit input {
   width: min(320px, 72vw);
