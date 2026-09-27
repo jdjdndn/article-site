@@ -954,7 +954,7 @@ if (key.value) loadList()
             <tr v-for="s in seeds" :key="s.id">
               <td class="title-cell">
                 {{ s.raw.slice(0, 70) }}{{ s.raw.length > 70 ? '…' : '' }}
-                <div class="id"><span v-if="s.source === 'user'" class="badge seed-user">用户投稿</span> #{{ s.id }} · {{ s.createdAt?.slice(0, 16).replace('T', ' ') }}</div>
+                <div class="id"><span v-if="s.source === 'user'" class="badge seed-user">用户投稿</span><span v-else-if="s.source === 'ai'" class="badge seed-ai">AI 选题</span> #{{ s.id }} · {{ s.createdAt?.slice(0, 16).replace('T', ' ') }}</div>
                 <div v-if="s.error" class="id err">{{ s.error }}</div>
               </td>
               <td class="muted">{{ s.category }} / {{ s.template }}</td>
@@ -1222,6 +1222,7 @@ if (key.value) loadList()
 .badge.seed-pending { background: #f0f5ff; color: #2f54eb; }
 .badge.seed-failed { background: #fff1f0; color: #fa541c; }
 .badge.seed-done { background: #f6ffed; color: #389e0d; }
+.badge.seed-ai { background: #f0f5ff; color: #722ed1; }
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-bottom: 22px; }
 .stat { background: #f9fafb; border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; }
 .stat .num { font-size: 26px; font-weight: 700; color: var(--primary); }

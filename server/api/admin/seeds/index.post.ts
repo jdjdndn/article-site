@@ -4,7 +4,8 @@ import { useDb } from '../../../utils/db'
 import { seeds } from '../../../db/schema'
 
 // POST /api/admin/seeds?key=xxx —— 批量添加素材
-// body: { items: [{raw, category?, template?, publishAt?, expiresAt?}], category?, template? }
+// body: { items: [{raw, category?, template?, publishAt?, expiresAt?, source?}], category?, template?, source? }
+// source: admin(后台/热搜转素材) / user(用户投稿) / ai(AI 自动选题)
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const body = await readBody(event)
@@ -18,6 +19,7 @@ export default defineEventHandler(async (event) => {
     .map((it: any) => {
       const raw = typeof it?.raw === 'string' ? it.raw.trim() : ''
       if (!raw || raw.length < 8) return null
+      const SRC = ['admin', 'user', 'ai']
       return {
         raw,
         // 未显式指定分类/模板时存 'auto'，由定时流水线 AI 自动判断
@@ -26,6 +28,7 @@ export default defineEventHandler(async (event) => {
         publishAt: it.publishAt ? String(it.publishAt) : null,
         expiresAt: it.expiresAt ? String(it.expiresAt) : null,
         status: 'pending',
+        source: SRC.includes(it.source) ? it.source : (SRC.includes(body?.source) ? body.source : 'admin'),
         createdAt: now,
         updatedAt: now,
       }
