@@ -3,6 +3,7 @@ import { requireAdmin } from '../../../utils/auth'
 import { useDb } from '../../../utils/db'
 import { articles } from '../../../db/schema'
 import { checkArticleSafety } from '../../../utils/content-safety'
+import { buildLinkStatements } from '../../../utils/links'
 
 // POST /api/admin/articles/batch?key=xxx —— 批量新增文章（AI 批量流水线产物）
 // body: { articles: Array<ArticleInput>, category?, template? }
@@ -25,7 +26,7 @@ export default defineEventHandler(async (event) => {
   const base = Date.now().toString().slice(-6)
 
   const db = useDb()
-  const stmts: ReturnType<typeof db.insert>[] = []
+  const stmts: any[] = []
   const results: Array<{ id?: string; ok: boolean; error?: string }> = []
   const safetyHits: Array<{ id: string; hits: any[] }> = []
 
@@ -51,7 +52,7 @@ export default defineEventHandler(async (event) => {
       const needsReview = safety.hits.length > 0 && status === 'published' ? 1 : 0
       if (safety.hits.length > 0 && status === 'published') {
         status = 'draft'
-        safetyHits.push({ id: `a-${ymd}-${base}${String(i).padStart(2, '0')}`, hits: safety.hits })
+        safetyHits.push({ id, hits: safety.hits })
       }
 
       stmts.push(db.insert(articles).values({
@@ -66,26 +67,28 @@ export default defineEventHandler(async (event) => {
         needsReview,
         publishAt,
         expiresAt: a.expiresAt ? String(a.expiresAt) : null,
-        links: normalizeJson(a.links) ?? '[]',
+        links: '[]',
         friendLinks: normalizeJson(a.friendLinks) ?? '[]',
         relatedIds: normalizeJson(a.relatedIds) ?? '[]',
         faq: normalizeJson(a.faq) ?? '[]',
         createdAt: now,
         updatedAt: now,
       }))
+      stmts.push(...buildLinkStatements(db, id, Array.isArray(a.links) ? a.links : [], now))
       results.push({ id, ok: true })
     } catch (e: any) {
       results.push({ ok: false, error: e?.message || '校验失败' })
     }
   })
 
-  const validStmts = stmts.filter(Boolean)
-  if (validStmts.length > 0) {
+  if (stmts.length > 0) {
     // D1 batch 原子提交；FTS 由 AFTER INSERT 触发器自动同步
-    await db.batch(validStmts as any)
+    await db.batch(stmts as any)
   }
 
-  return { ok: true, total: list.length, created: validStmts.length, failed: results.filter((r) => !r.ok).length, results, safetyHits }
+  // 新文章不影响旧详情缓存，但首页列表缓存 60s 自然过期，无需逐个 purge
+
+  return { ok: true, total: list.length, created: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results, safetyHits }
 })
 
 function normalizeJson(v: any): string | null {

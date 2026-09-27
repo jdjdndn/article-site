@@ -4,6 +4,8 @@ import { requireAdmin } from '../../../utils/auth'
 import { useDb } from '../../../utils/db'
 import { articles } from '../../../db/schema'
 import { checkArticleSafety } from '../../../utils/content-safety'
+import { buildLinkStatements } from '../../../utils/links'
+import { purgeArticle } from '../../../utils/cache'
 
 // PUT /api/admin/articles/:id?key=xxx —— 修改文章（整篇覆盖，表单回填）
 export default defineEventHandler(async (event) => {
@@ -33,7 +35,7 @@ export default defineEventHandler(async (event) => {
   const needsReview = safetyHits.length > 0 ? 1 : 0
   if (safetyHits.length > 0) status = 'draft'
 
-  await db.update(articles).set({
+  const updateStmt = db.update(articles).set({
     title: body.title.trim(),
     summary: typeof body.summary === 'string' ? body.summary : '',
     content,
@@ -44,12 +46,17 @@ export default defineEventHandler(async (event) => {
     needsReview,
     publishAt,
     expiresAt: body.expiresAt ? String(body.expiresAt) : null,
-    links: normalizeJson(body.links) ?? '[]',
+    links: '[]',
     friendLinks: normalizeJson(body.friendLinks) ?? '[]',
     relatedIds: normalizeJson(body.relatedIds) ?? '[]',
     faq: normalizeJson(body.faq) ?? '[]',
     updatedAt: now,
   }).where(eq(articles.id, id))
+  const linkStmts = buildLinkStatements(db, id, Array.isArray(body.links) ? body.links : [], now)
+  await db.batch([updateStmt, ...linkStmts])
+
+  // 定点失效边缘缓存（详情页 + 首页），失败最多延迟 TTL
+  await purgeArticle(id)
 
   return { id, ok: true, safetyHits }
 })

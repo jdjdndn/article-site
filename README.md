@@ -116,6 +116,35 @@
 
 > 批量面板可指定模板/分类/模型/**定时发布**（可选，datetime-local：填了未来时间自动进草稿，到点 cron 发布，与手动单篇定时同一机制，互不冲突）；入库后回列表可逐条编辑。AI 生成结果命中内容安全规则会自动转草稿（见下）。
 
+### 定时 AI 流水线（每天自动产文入库）
+
+不想手动点后台时，用 **Windows 定时任务 + 本地 AI 网关** 自动消化素材：
+
+1. **放素材**：把原始文案写进 `E:\code\article-site\scheduled-seeds.json`：
+
+   ```json
+   [
+     { "raw": "蒙牛特仑苏低脂牛奶 250ml×16盒 44.9元 领券直降…",
+       "category": "好物", "template": "deal",
+       "publishAt": "2026-09-30T08:00:00.000Z",  // 可选：未来时间=定时草稿；缺省=立即发布
+       "expiresAt": "2026-12-31" }
+   ]
+   ```
+
+   `raw` 必填（京东/淘宝/拼多多文案、链接都行），`category`/`template`/`publishAt`/`expiresAt` 可选。
+
+2. **已注册定时任务**：`ArticleSite-AIGenerate`（Windows 任务计划）**每天 08:00** 自动运行 `node scripts/scheduled-generate.mjs`——逐条调本地网关去 AI 味+结构化 → 线上批量入库 → 内容安全命中自动转待审 → **成功后素材自动从文件移除**（失败条目保留，日志见控制台/任务历史）。
+
+3. 手动跑一次 / 换模型 / 只生成不入库：
+
+   ```powershell
+   node scripts/scheduled-generate.mjs                # 默认 deepseek-chat
+   node scripts/scheduled-generate.mjs --model kimi   # 换模型（网关 webauth 过即可用）
+   node scripts/scheduled-generate.mjs --dry-run      # 只生成，不入库不消费素材
+   ```
+
+4. 改时间：`schtasks /Change /TN ArticleSite-AIGenerate /ST 09:30`（或任务计划程序图形界面）。网关没启动时脚本会失败，素材保留等下次。
+
 ### 内容安全审核（先审后发）
 
 发布（手动/批量/定时）时对 **标题+摘要+正文** 做违规词扫描（`server/utils/content-safety.ts`，覆盖色情/赌博/毒品/诈骗引流/暴恐武器/违禁交易/未成年相关等通用类别）：
@@ -133,12 +162,33 @@
 后台表单勾选"定时发布"（datetime-local）→ 保存时自动转 ISO 存 `publish_at`：
 
 - 填了**未来时间** → 状态强制 `draft`（列表显示 ⏱ 徽标），前台不可见
-- **到点后** Cloudflare Cron Trigger（每分钟）触发 `scheduled` 事件 → `server/plugins/publish-on-schedule.ts` 自动转 `published`，前台可见
+- **到点后** Cloudflare Cron Trigger（每 5 分钟，`wrangler.jsonc` 的 `triggers.crons` = `*/5 * * * *`）触发 `scheduled` 事件 → `server/plugins/publish-on-schedule.ts` 自动转 `published`，前台可见（发布/过期误差 ≤5 分钟）
 - 已发布的文章 `expires_at` 到期后同样由该 cron 自动标记 `expired`
 
 > 实现说明：没用 Nitro 的 `scheduledTasks`（在 cloudflare_module preset 下未生效，任务不会被打包），改为插件挂 `cloudflare:scheduled` hook，逻辑等价且幂等。cron 配置在 `wrangler.jsonc` 的 `triggers.crons`。
 
-### 管理
+### 链接体系（独立表 + 自动过期 + 点击统计）
+
+文章-链接一对多，`links` 表存储（`article_id/sort/label/url/kind/status/expires_at`）：
+
+- **分组**：`kind` = coupon(领券) / buy(抢购) / more(更多)——前台 coupon+buy 常显，more 收进"更多好物"折叠
+- **自动过期**：`expires_at` 到期链接前台**自动隐藏**（展示层过滤，无需人工处理）；后台"链接管理"可勾选批量停用/启用/批量设过期日期（涉及文章缓存自动 purge）
+- **点击统计**：链接点击 `sendBeacon` 异步上报 `/api/track/click`（不拦截跳转、不改链接地址）→ `click_logs` 表，cron 每 5 分钟清理 90 天前数据
+- 文章 JSON 里不再存 links（列保留但恒为 `[]`），迁移脚本 `scripts/migrate-links.mjs`（一次性，已执行）
+
+### 缓存与 SEO（资源节约核心）
+
+- **边缘缓存分层**（`nuxt.config.ts` routeRules）：首页/列表 60s、详情页 300s、about/sitemap 1h；后台/API 全 `no-store`；后台页 `X-Robots-Tag: noindex`
+- 后台保存/删除/通过/批量链接操作时 **Cache API 定点 purge** 详情页+首页，失败最多延迟对应 TTL
+- `robots.txt`（Disallow /admin /api /track）+ 动态 `sitemap.xml`（仅 published 未过期，边缘缓存 1h）
+- 自定义 `error.vue`：404 兜底 + 详情接口对 expired/deleted 返回 `status:'gone'` + 相关推荐（下架页 noindex，回收流量）
+- 相关文章自动推荐：related_ids 优先 → 同分类兜底（SSR 一次查询，缓存命中为零）
+
+### 收藏
+
+详情页「☆ 收藏」（设备指纹免注册）→ 导航「收藏」页 `/favorites`（CSR，noindex）。
+
+### 管理### 管理
 
 - 列表可编辑/软删；回收站可恢复/永久删除（永久删除不可恢复）
 - 无 key 访问后台与 API 一律 401
@@ -184,6 +234,7 @@ npx wrangler dev          # http://localhost:8787（读取 .dev.vars 里的 NUXT
 - database_id：`9051caef-e987-4a47-ae8c-2f91496b1a82`（在 `wrangler.jsonc`）
 - 表：`articles`（文章，含 template / needs_review / publish_at 列）、`favorites`（收藏，设备指纹）
 - 改 schema：`npx drizzle-kit generate` 生成迁移 → `wrangler d1 execute article-db --remote --file=./drizzle/xxx.sql` 应用
+- 索引：`idx_articles_publish_at` / `idx_articles_expires_at`（cron 扫描走索引，已远程执行 `CREATE INDEX IF NOT EXISTS`）
 - 已有过的手动迁移：`ALTER TABLE articles ADD COLUMN template text NOT NULL DEFAULT 'default'`、`ALTER TABLE articles ADD COLUMN needs_review integer NOT NULL DEFAULT 0`（远程+本地都要执行；`drizzle/0001_add-needs-review.sql` 是 drizzle 生成的完整 diff，含已手动加过的列，回放时跳过重复列）
 
 ## 六、部署（Cloudflare Workers）

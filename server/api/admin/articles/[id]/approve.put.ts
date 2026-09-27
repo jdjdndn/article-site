@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 import { requireAdmin } from '../../../../utils/auth'
 import { useDb } from '../../../../utils/db'
 import { articles } from '../../../../db/schema'
+import { purgeArticle } from '../../../../utils/cache'
 
 // PUT /api/admin/articles/:id/approve?key=xxx —— 人工审核通过
 // body: { status?: 'published' | 'draft' }（默认保持当前状态，仅清除待审标记）
@@ -29,5 +30,6 @@ export default defineEventHandler(async (event) => {
     .set({ needsReview: 0, status: nextStatus, updatedAt: now })
     .where(eq(articles.id, id))
 
+  await purgeArticle(id)
   return { id, ok: true, status: nextStatus }
 })

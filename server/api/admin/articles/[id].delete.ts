@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 import { requireAdmin } from '../../../utils/auth'
 import { useDb } from '../../../utils/db'
 import { articles } from '../../../db/schema'
+import { purgeArticle } from '../../../utils/cache'
 
 // DELETE /api/admin/articles/:id?key=xxx —— 软删除（status → deleted，进回收站）
 export default defineEventHandler(async (event) => {
@@ -15,5 +16,6 @@ export default defineEventHandler(async (event) => {
   if (!exist) throw createError({ statusCode: 404, statusMessage: '文章不存在' })
 
   await db.update(articles).set({ status: 'deleted', updatedAt: new Date().toISOString() }).where(eq(articles.id, id))
+  await purgeArticle(id)
   return { id, ok: true, soft: true }
 })

@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /admin
+Disallow: /api
+Disallow: /track
+Allow: /
+
+Sitemap: https://www.wcbblll.cc/sitemap.xml

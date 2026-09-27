@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { SITE_CATEGORIES } from '../config/site'
 import { reactive, ref, computed } from 'vue'
 
 const route = useRoute()
 const key = computed(() => (route.query.key as string) || '')
 
 // 视图状态：list（文章管理）/ trash（回收站）；mode：list / create / edit
-const tab = ref<'list' | 'trash' | 'review'>('list')
+const tab = ref<'list' | 'trash' | 'review' | 'links' | 'seeds' | 'stats'>('list')
 const mode = ref<'list' | 'create' | 'edit'>('list')
 const previewMode = ref(false)
 const aiPanel = ref(false)
@@ -165,6 +166,7 @@ async function runAi() {
     if (Array.isArray(parsed.tags)) form.tags = JSON.stringify(parsed.tags, null, 2)
     if (Array.isArray(parsed.faq)) form.faq = JSON.stringify(parsed.faq, null, 2)
     if (parsed.expiresAt && typeof parsed.expiresAt === 'string') form.expiresAt = parsed.expiresAt
+    syncLinkList()
     if (!validateForm()) throw new Error('AI 生成的 JSON 校验未通过，请人工检查')
     aiPanel.value = false
     flash('AI 完善完成，点「预览效果」核对后再保存')
@@ -336,6 +338,7 @@ function openCreate() {
   mode.value = 'create'
   editingId.value = ''
   Object.assign(form, emptyForm)
+  syncLinkList()
 }
 async function openEdit(a: any) {
   const res = await api(`/api/admin/articles/${a.id}`)
@@ -356,13 +359,14 @@ async function openEdit(a: any) {
     relatedIds: JSON.stringify(art.relatedIds, null, 2),
     friendLinks: JSON.stringify(art.friendLinks, null, 2),
   })
+  syncLinkList()
   mode.value = 'edit'
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 async function save() {
   if (!validateForm()) return
   busy.value = true
-  const body = { ...form, publishAt: form.publishAt ? new Date(form.publishAt).toISOString() : '' }
+  const body = { ...form, publishAt: form.publishAt ? new Date(form.publishAt).toISOString() : '', links: linkList.value }
   try {
     if (mode.value === 'create') {
       const res = await api('/api/admin/articles', { method: 'POST', body })
@@ -385,6 +389,108 @@ async function save() {
   }
 }
 
+// —— 链接行编辑器（表单内结构化编辑，替代 JSON textarea） ——
+const linkList = ref<any[]>([])
+function syncLinkList() {
+  linkList.value = parseField('links') || []
+}
+function addLink() {
+  linkList.value.push({ label: '', url: '', kind: 'buy', expiresAt: '', status: 'active' })
+}
+function removeLink(i: number) {
+  linkList.value.splice(i, 1)
+}
+function moveLink(i: number, dir: number) {
+  const j = i + dir
+  if (j < 0 || j >= linkList.value.length) return
+  const tmp = linkList.value[i]
+  linkList.value[i] = linkList.value[j]
+  linkList.value[j] = tmp
+}
+
+// —— 链接管理（全站链接，勾选批量停用/启用/设过期日期） ——
+const links = ref<any[]>([])
+const linkPage = ref(1)
+const linkSize = 50
+const linkStatus = ref('all')
+const selLinks = ref<number[]>([])
+async function loadLinks() {
+  const res = await api('/api/admin/links', { query: { status: linkStatus.value, page: linkPage.value, size: linkSize } })
+  links.value = res.list || []
+}
+function toggleSel(id: number) {
+  const i = selLinks.value.indexOf(id)
+  if (i >= 0) selLinks.value.splice(i, 1)
+  else selLinks.value.push(id)
+}
+function selAll() {
+  if (links.value.length && selLinks.value.length !== links.value.length) selLinks.value = links.value.map((l: any) => l.id)
+  else selLinks.value = []
+}
+async function batchLinks(status?: 'active' | 'inactive') {
+  if (!selLinks.value.length) { flash('请先勾选链接'); return }
+  const patch: any = {}
+  if (status) patch.status = status
+  else {
+    const d = prompt('设置过期日期（YYYY-MM-DD），留空清除过期时间：')
+    if (d === null) return
+    patch.expiresAt = d.trim() || null
+  }
+  if (!patch.status && !patch.expiresAt) return
+  await api('/api/admin/links/batch', { method: 'POST', body: { ids: [...selLinks.value], ...patch } })
+  flash(`已批量更新 ${selLinks.value.length} 条链接（关联文章缓存已同步清除）`)
+  selLinks.value = []
+  await loadLinks()
+}
+function prevLinkPage() { if (linkPage.value > 1) { linkPage.value--; loadLinks() } }
+function nextLinkPage() { linkPage.value++; loadLinks() }
+
+// —— 素材队列（AI 流水线原料：云端管理，本机定时脚本每天拉 pending 处理） ——
+const seeds = ref<any[]>([])
+const seedPage = ref(1)
+const seedStatus = ref('all')
+const seedRaw = ref('')
+const seedBusy = ref(false)
+const seedTotal = ref(0)
+async function loadSeeds() {
+  const res = await api('/api/admin/seeds', { query: { status: seedStatus.value, page: seedPage.value, size: 30 } })
+  seeds.value = res.list || []
+  seedTotal.value = res.total || 0
+}
+async function addSeeds() {
+  const parts = splitRaw(seedRaw.value)
+  if (!parts.length) { flash('未切分出有效素材（需至少 8 字符，多条用空行分隔）'); return }
+  seedBusy.value = true
+  try {
+    const res = await api('/api/admin/seeds', { method: 'POST', body: { items: parts.map((raw: string) => ({ raw })) } })
+    flash(`已加入素材队列 ${res.added} 条，定时任务将自动处理`)
+    seedRaw.value = ''
+    await loadSeeds()
+  } catch (e: any) { flash(`失败：${e?.data?.statusMessage || e?.message}`) }
+  finally { seedBusy.value = false }
+}
+async function deleteSeed(s: any) {
+  if (!confirm(`删除素材 #${s.id}？`)) return
+  await api(`/api/admin/seeds/${s.id}`, { method: 'DELETE' })
+  await loadSeeds()
+}
+async function retrySeed(s: any) {
+  await api(`/api/admin/seeds/${s.id}`, { method: 'PUT', body: { status: 'pending' } })
+  flash('已放回待处理，下次定时任务重新生成')
+  await loadSeeds()
+}
+
+// —— 数据统计（最小看板） ——
+const stats = ref<any>(null)
+async function loadStats() {
+  const res = await api('/api/admin/stats')
+  stats.value = res
+}
+function pct(n: number): string {
+  const max = Math.max(1, ...(stats.value?.byCategory || []).map((c: any) => c.n))
+  return Math.round((n / max) * 100) + '%'
+}
+
 // —— 删除 / 回收站 ——
 async function softDelete(a: any) {
   if (!confirm(`软删除《${a.title}》？将进入回收站，可恢复。`)) return
@@ -405,11 +511,14 @@ async function hardDelete(a: any) {
   await loadTrash()
 }
 
-function switchTab(t: 'list' | 'trash' | 'review') {
+function switchTab(t: 'list' | 'trash' | 'review' | 'links' | 'seeds' | 'stats') {
   tab.value = t
   if (t === 'list') loadList()
   else if (t === 'trash') loadTrash()
-  else loadReview()
+  else if (t === 'review') loadReview()
+  else if (t === 'links') loadLinks()
+  else if (t === 'seeds') loadSeeds()
+  else loadStats()
 }
 
 // 初始加载
@@ -430,6 +539,9 @@ if (key.value) loadList()
           <button :class="{ active: tab === 'list' }" @click="switchTab('list')">文章管理</button>
           <button :class="{ active: tab === 'trash' }" @click="switchTab('trash')">回收站（{{ trash.length }}）</button>
           <button :class="{ active: tab === 'review' }" @click="switchTab('review')">待审（{{ review.length }}）</button>
+          <button :class="{ active: tab === 'links' }" @click="switchTab('links')">链接管理</button>
+          <button :class="{ active: tab === 'seeds' }" @click="switchTab('seeds')">素材队列</button>
+          <button :class="{ active: tab === 'stats' }" @click="switchTab('stats')">数据统计</button>
         </div>
         <button v-if="tab === 'list' && mode === 'list'" class="primary" @click="openCreate">＋ 新建文章</button>
         <button v-if="tab === 'list' && mode === 'list'" class="primary" @click="openBatch">⿇ 批量录入</button>
@@ -536,7 +648,8 @@ if (key.value) loadList()
         <div class="row">
           <label>分类
             <select v-model="form.category">
-              <option>优惠</option><option>攻略</option><option>好物</option><option>副业</option><option>其他</option>
+              <option v-for="c in SITE_CATEGORIES" :key="c" :value="c">{{ c }}</option>
+              <option value="其他">其他</option>
             </select>
           </label>
           <label>模板
@@ -564,9 +677,27 @@ if (key.value) loadList()
           <textarea v-model="form.content" rows="8" class="mono" :class="{ invalid: !fieldValid('content') }"></textarea>
           <span class="hint">块类型：text 段落 / h2 小标题 / list 要点（items:[]）/ price 价格卡（price,original?,spec?）/ quote 提示框（text,tone:"warn"|"info"）/ ad 软文（label,text,link?）/ image 图片（url,alt?）</span>
         </label>
-        <label>链接（JSON [{label,url}]）
-          <textarea v-model="form.links" rows="3" class="mono" :class="{ invalid: !fieldValid('links') }"></textarea>
-        </label>
+        <div class="links-editor">
+          <div class="links-editor-head">
+            <span class="links-editor-title">链接（购买按钮）</span>
+            <button type="button" class="ghost mini" @click="addLink">＋ 添加链接</button>
+          </div>
+          <p class="hint">类型：coupon 领券 / buy 抢购 / more 更多（前台自动分组，more 收进"更多好物"折叠）；过期日期到期自动隐藏（留空 = 长期有效）。</p>
+          <div v-if="!linkList.length" class="links-empty">暂无链接</div>
+          <div v-for="(l, i) in linkList" :key="i" class="link-row">
+            <input v-model="l.label" placeholder="按钮文字（领券/抢购…）" class="mono" />
+            <input v-model="l.url" placeholder="https://…" class="mono url" />
+            <select v-model="l.kind" class="kind">
+              <option value="coupon">领券</option>
+              <option value="buy">抢购</option>
+              <option value="more">更多</option>
+            </select>
+            <input v-model="l.expiresAt" placeholder="过期日期(可选)" class="mono exp" />
+            <button type="button" class="ghost mini" @click="moveLink(i, -1)">↑</button>
+            <button type="button" class="ghost mini" @click="moveLink(i, 1)">↓</button>
+            <button type="button" class="danger mini" @click="removeLink(i)">✕</button>
+          </div>
+        </div>
         <label>标签（JSON 数组）
           <textarea v-model="form.tags" rows="2" class="mono" :class="{ invalid: !fieldValid('tags') }"></textarea>
         </label>
@@ -713,6 +844,140 @@ if (key.value) loadList()
         <p class="hint">待审 = 内容安全规则命中自动转草稿的文章；通过后清除标记并可选立即发布。词库仅兜底，请人工复核实际内容。</p>
       </div>
 
+      <!-- 链接管理（全站链接批量操作） -->
+      <div v-else-if="tab === 'links'" class="card">
+        <div class="links-toolbar">
+          <select v-model="linkStatus" @change="linkPage = 1; loadLinks()">
+            <option value="all">全部状态</option>
+            <option value="active">有效</option>
+            <option value="inactive">已停用</option>
+          </select>
+          <span class="hint">已选 {{ selLinks.length }} 条</span>
+          <button class="mini" @click="selAll()">全选/清空</button>
+          <button class="mini" @click="batchLinks('active')">批量启用</button>
+          <button class="mini danger" @click="batchLinks('inactive')">批量停用</button>
+          <button class="mini" @click="batchLinks()">批量设过期日期</button>
+        </div>
+        <div v-if="!links.length" class="empty">暂无链接</div>
+        <table v-else class="tbl">
+          <thead>
+            <tr><th></th><th>按钮/链接</th><th>所属文章</th><th>类型</th><th>状态</th><th>过期日期</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="l in links" :key="l.id">
+              <td><input type="checkbox" :checked="selLinks.includes(l.id)" @change="toggleSel(l.id)" /></td>
+              <td class="title-cell">
+                {{ l.label || '（无按钮文字）' }}
+                <div class="id">{{ l.url.slice(0, 60) }}</div>
+              </td>
+              <td class="muted">{{ l.articleId }}</td>
+              <td><span class="badge" :class="'kind-' + l.kind">{{ l.kind }}</span></td>
+              <td><span class="badge" :class="l.status">{{ l.status }}</span></td>
+              <td class="muted">{{ l.expiresAt || '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="pager">
+          <button class="mini" :disabled="linkPage <= 1" @click="prevLinkPage">← 上一页</button>
+          <span class="hint">第 {{ linkPage }} 页（每页 {{ linkSize }} 条）</span>
+          <button class="mini" :disabled="links.length < linkSize" @click="nextLinkPage">下一页 →</button>
+        </div>
+        <p class="hint">到期链接前台自动隐藏（无需人工处理）；"批量停用"用于某券全线失效等场景。批量操作会自动清除受影响文章的缓存。</p>
+      </div>
+
+      <!-- 素材队列 -->
+      <div v-else-if="tab === 'seeds'" class="card">
+        <div class="seed-add">
+          <textarea v-model="seedRaw" rows="4" class="mono" placeholder="粘贴原始素材（多条用空行分隔），如：
+——蒙牛 牛奶——
+44.9元 蒙牛特仑苏低脂纯牛奶250ml×16盒 领券直降…"></textarea>
+          <div class="seed-add-bar">
+            <button class="mini primary" :disabled="seedBusy || !seedRaw.trim()" @click="addSeeds">＋ 加入素材队列</button>
+            <span class="hint">定时 AI 流水线（每天 08:00）自动处理 pending 素材：去 AI 味 + 结构化 + 入库；失败可「重试」放回队列。</span>
+          </div>
+        </div>
+        <div class="links-toolbar">
+          <select v-model="seedStatus" @change="seedPage = 1; loadSeeds()">
+            <option value="all">全部</option>
+            <option value="pending">待处理</option>
+            <option value="failed">失败</option>
+            <option value="done">已完成</option>
+          </select>
+          <span class="hint">共 {{ seedTotal }} 条</span>
+        </div>
+        <div v-if="!seeds.length" class="empty">暂无素材</div>
+        <table v-else class="tbl">
+          <thead>
+            <tr><th>素材</th><th>分类/模板</th><th>状态</th><th>定时/过期</th><th>操作</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="s in seeds" :key="s.id">
+              <td class="title-cell">
+                {{ s.raw.slice(0, 70) }}{{ s.raw.length > 70 ? '…' : '' }}
+                <div class="id">#{{ s.id }} · {{ s.createdAt?.slice(0, 16).replace('T', ' ') }}</div>
+                <div v-if="s.error" class="id err">{{ s.error }}</div>
+              </td>
+              <td class="muted">{{ s.category }} / {{ s.template }}</td>
+              <td><span class="badge" :class="'seed-' + s.status">{{ s.status }}</span></td>
+              <td class="muted">{{ s.publishAt?.slice(0, 16).replace('T', ' ') || '—' }} / {{ s.expiresAt || '—' }}</td>
+              <td>
+                <NuxtLink v-if="s.articleId" :to="`/article/${s.articleId}`" target="_blank" class="mini">查看文章</NuxtLink>
+                <button v-if="s.status === 'failed'" class="mini" @click="retrySeed(s)">重试</button>
+                <button class="mini danger" @click="deleteSeed(s)">删除</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="pager">
+          <button class="mini" :disabled="seedPage <= 1" @click="seedPage--; loadSeeds()">← 上一页</button>
+          <span class="hint">第 {{ seedPage }} 页</span>
+          <button class="mini" :disabled="seeds.length < 30" @click="seedPage++; loadSeeds()">下一页 →</button>
+        </div>
+      </div>
+
+      <!-- 数据统计（最小看板） -->
+      <div v-else-if="tab === 'stats'" class="card">
+        <div v-if="!stats" class="empty">加载中…</div>
+        <template v-else>
+          <div class="stats-grid">
+            <div class="stat">
+              <div class="num">{{ stats.total }}</div>
+              <div class="label">文章总数</div>
+            </div>
+            <div class="stat">
+              <div class="num">{{ stats.byStatus?.published || 0 }}</div>
+              <div class="label">已发布</div>
+            </div>
+            <div class="stat">
+              <div class="num">{{ stats.byStatus?.draft || 0 }}</div>
+              <div class="label">草稿</div>
+            </div>
+            <div class="stat">
+              <div class="num">{{ stats.clicks }}</div>
+              <div class="label">累计点击</div>
+            </div>
+            <div class="stat">
+              <div class="num">{{ stats.todayClicks }}</div>
+              <div class="label">今日点击</div>
+            </div>
+            <div class="stat">
+              <div class="num">{{ stats.pendingSeeds }}</div>
+              <div class="label">待生成素材</div>
+            </div>
+          </div>
+          <h3 class="stats-title">分类分布（已发布）</h3>
+          <div v-if="!stats.byCategory?.length" class="hint">暂无已发布文章</div>
+          <div v-else class="cat-bars">
+            <div v-for="c in stats.byCategory" :key="c.category" class="cat-bar">
+              <span class="cat-name">{{ c.category }}</span>
+              <div class="bar"><div class="bar-fill" :style="{ width: pct(c.n) }"></div></div>
+              <span class="cat-n">{{ c.n }}</span>
+            </div>
+          </div>
+          <p class="hint">看板为后台实时聚合（admin-only）；点击数据来自详情页链接点击上报。</p>
+        </template>
+      </div>
+
       <!-- 回收站 -->
       <div v-else class="card">
         <div v-if="!trash.length" class="empty">回收站为空</div>
@@ -818,6 +1083,38 @@ if (key.value) loadList()
 .mini { padding: 3px 10px; border: 1px solid #ddd; background: #fff; border-radius: 6px; cursor: pointer; font-size: 12px; margin-right: 6px; }
 .mini.danger { color: #fa541c; border-color: #ffccc7; }
 .mini.danger:hover { background: #fff1f0; }
+.links-editor { margin-bottom: 16px; }
+.links-editor-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.links-editor-title { font-size: 14px; font-weight: 600; }
+.links-empty { color: var(--text-muted); font-size: 13px; padding: 8px 0; }
+.link-row { display: flex; gap: 6px; align-items: center; margin: 6px 0; flex-wrap: wrap; }
+.link-row .url { flex: 1; min-width: 200px; }
+.link-row .exp { width: 120px; }
+.link-row .kind { width: 72px; }
+.links-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.seed-add { margin-bottom: 14px; }
+.seed-add textarea { width: 100%; box-sizing: border-box; }
+.seed-add-bar { display: flex; gap: 10px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.id.err { color: #fa541c; }
+.badge.seed-pending { background: #f0f5ff; color: #2f54eb; }
+.badge.seed-failed { background: #fff1f0; color: #fa541c; }
+.badge.seed-done { background: #f6ffed; color: #389e0d; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-bottom: 22px; }
+.stat { background: #f9fafb; border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; }
+.stat .num { font-size: 26px; font-weight: 700; color: var(--primary); }
+.stat .label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.stats-title { font-size: 15px; margin-bottom: 10px; color: var(--text); }
+.cat-bars { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.cat-bar { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.cat-name { width: 56px; color: var(--text); }
+.bar { flex: 1; height: 10px; background: #f1f5f9; border-radius: 999px; overflow: hidden; }
+.bar-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--primary-strong)); border-radius: 999px; }
+.cat-n { width: 30px; text-align: right; color: var(--text-muted); }
+.pager { display: flex; gap: 12px; align-items: center; justify-content: center; margin-top: 14px; }
+.badge.kind-coupon { background: #fef3c7; color: #92400e; }
+.badge.kind-buy { background: var(--primary-weak); color: var(--primary); }
+.badge.kind-more { background: #e0e7ff; color: #4338ca; }
+
 .empty { text-align: center; color: #999; padding: 30px 0; }
 .hint { color: #999; font-size: 12px; margin-top: 10px; }
 .warn { color: #fa541c; }

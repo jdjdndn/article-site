@@ -2,21 +2,21 @@ import { defineEventHandler, getRouterParam, getQuery, createError } from 'h3'
 import { eq, and, sql, desc } from 'drizzle-orm'
 import { useDb } from '../../utils/db'
 import { articles, favorites } from '../../db/schema'
+import { getArticleLinks } from '../../utils/links'
 
 // GET /api/articles/:id
-// 返回完整文章 + related（6.2 判定：related_ids → 标签重叠 → 同分类兜底）+ 收藏状态（?fp= 可选）
+// 返回完整文章 + 有效链接（links 独立表，active 且未过期）+ related + 收藏状态
+// expired/deleted → 返回 { status: 'gone', article, related }（前端渲染下架页 + noindex），仅 id 不存在才 404
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, message: 'missing id' })
   const db = useDb()
 
-  const [article] = await db
-    .select()
-    .from(articles)
-    .where(and(eq(articles.id, id), eq(articles.status, 'published'), sql`(expires_at IS NULL OR expires_at > datetime('now'))`))
-    .limit(1)
+  const [article] = await db.select().from(articles).where(eq(articles.id, id)).limit(1)
 
-  if (!article) throw createError({ statusCode: 404, message: '文章不存在或已下架' })
+  if (!article) throw createError({ statusCode: 404, message: '文章不存在' })
+
+  const gone = article.status === 'expired' || article.status === 'deleted'
 
   // 收藏统计 + 当前设备是否已收藏
   const [fav] = await db
@@ -35,7 +35,7 @@ export default defineEventHandler(async (event) => {
     favorited = !!mine
   }
 
-  // 相关文章：related_ids 优先
+  // 相关文章：related_ids 优先 → 同分类兜底
   let related: any[] = []
   try {
     const ids = JSON.parse(article.relatedIds || '[]')
@@ -43,12 +43,11 @@ export default defineEventHandler(async (event) => {
       related = await db
         .select({ id: articles.id, title: articles.title, summary: articles.summary })
         .from(articles)
-        .where(and(sql`id IN (${ids.map((i: string) => `'${i}'`).join(',')})`, eq(articles.status, 'published')))
+        .where(and(sql`id IN (${ids.map((i: string) => `'${i}'`).join(',')})`, eq(articles.status, 'published'), sql`id != ${article.id}`))
         .limit(6)
     }
   } catch { /* related_ids 解析失败则走兜底 */ }
 
-  // 兜底：同分类最新
   if (!related.length) {
     related = await db
       .select({ id: articles.id, title: articles.title, summary: articles.summary })
@@ -58,18 +57,20 @@ export default defineEventHandler(async (event) => {
       .limit(6)
   }
 
-  // JSON 字段还原为对象
+  // 有效链接（独立表）
+  const linkRows = await getArticleLinks(db, id)
+
   const parsed = {
     ...article,
     content: safeJson(article.content),
     tags: safeJson(article.tags),
-    links: safeJson(article.links),
+    links: linkRows,
     friendLinks: safeJson(article.friendLinks),
     relatedIds: safeJson(article.relatedIds),
     faq: safeJson(article.faq),
   }
 
-  return { article: parsed, related, favoriteCount: fav?.n ?? 0, favorited }
+  return { article: parsed, status: gone ? 'gone' : 'live', related, favoriteCount: fav?.n ?? 0, favorited }
 })
 
 function safeJson(s: string | null, fallback: any = []) {

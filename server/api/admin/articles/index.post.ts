@@ -3,6 +3,7 @@ import { requireAdmin } from '../../../utils/auth'
 import { useDb } from '../../../utils/db'
 import { articles } from '../../../db/schema'
 import { checkArticleSafety } from '../../../utils/content-safety'
+import { buildLinkStatements } from '../../../utils/links'
 
 // POST /api/admin/articles?key=xxx —— 手动新增文章（表单 → JSON → 入库）
 export default defineEventHandler(async (event) => {
@@ -37,7 +38,7 @@ export default defineEventHandler(async (event) => {
   if (safetyHits.length > 0) status = 'draft'
 
   const db = useDb()
-  await db.insert(articles).values({
+  const articleStmt = db.insert(articles).values({
     id,
     title: body.title.trim(),
     summary: typeof body.summary === 'string' ? body.summary : '',
@@ -49,13 +50,15 @@ export default defineEventHandler(async (event) => {
     needsReview,
     publishAt,
     expiresAt: body.expiresAt ? String(body.expiresAt) : null,
-    links: normalizeJson(body.links) ?? '[]',
+    links: '[]',
     friendLinks: normalizeJson(body.friendLinks) ?? '[]',
     relatedIds: normalizeJson(body.relatedIds) ?? '[]',
     faq: normalizeJson(body.faq) ?? '[]',
     createdAt: now,
     updatedAt: now,
   })
+  const linkStmts = buildLinkStatements(db, id, Array.isArray(body.links) ? body.links : [], now)
+  await db.batch([articleStmt, ...linkStmts])
 
   return { id, ok: true, safetyHits }
 })

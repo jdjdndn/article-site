@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 import { requireAdmin } from '../../../../utils/auth'
 import { useDb } from '../../../../utils/db'
 import { articles } from '../../../../db/schema'
+import { purgeArticle } from '../../../../utils/cache'
 
 // PUT /api/admin/articles/:id/restore?key=xxx —— 回收站恢复（status → draft）
 export default defineEventHandler(async (event) => {
@@ -16,5 +17,6 @@ export default defineEventHandler(async (event) => {
   if (exist.status !== 'deleted') throw createError({ statusCode: 400, statusMessage: '仅回收站内的文章可恢复' })
 
   await db.update(articles).set({ status: 'draft', updatedAt: new Date().toISOString() }).where(eq(articles.id, id))
+  await purgeArticle(id)
   return { id, ok: true, restored: true }
 })

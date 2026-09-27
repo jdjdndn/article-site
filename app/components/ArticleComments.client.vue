@@ -59,7 +59,12 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.comments { margin-bottom: 20px; }
-.comments h2 { font-size: 16px; margin-bottom: 10px; }
-.hint { color: #999; font-size: 13px; }
+.comments { margin-bottom: 22px; padding: 20px 24px; }
+.comments h2 { font-size: 17px; margin-bottom: 12px; color: var(--text); }
+.hint { color: var(--text-muted); font-size: 13px; }
+/* Waline/Artalk/Twikoo 内部控件细节统一 */
+.comments :deep(.wl-card), .comments :deep(.atk-comment) { box-shadow: none !important; border-color: var(--border) !important; }
+@media (max-width: 600px) {
+  .comments { padding: 16px; }
+}
 </style>

@@ -1,0 +1,162 @@
+#!/usr/bin/env node
+/**
+ * 定时 AI 流水线（Windows 任务计划每天 08:00 触发）
+ *
+ * 从线上素材池拉取 pending 素材 → 本地 AI 网关（localhost:3456，免费网页版模型）
+ * 去 AI 味 + 结构化 → 线上批量入库 → 标记 done（失败标 failed，可后台重试）。
+ *
+ * 素材管理在后台「素材队列」tab（云端 D1，不再用本地 JSON 文件）。
+ *
+ * 用法：
+ *   node scripts/scheduled-generate.mjs                 # 默认模型 deepseek-chat
+ *   node scripts/scheduled-generate.mjs --model kimi     # 指定模型（网关 webauth 过即可用）
+ *   node scripts/scheduled-generate.mjs --dry-run        # 只生成不入库不标记
+ */
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
+
+const __dir = path.dirname(fileURLToPath(import.meta.url))
+const ROOT = path.resolve(__dir, '..')
+const KEY_FILE = path.join(ROOT, '.env.manage-key')
+const TFG = 'http://localhost:3456/v1'
+const SITE = 'https://www.wcbblll.cc'
+
+const args = process.argv.slice(2)
+const model = (args.find((a) => a.startsWith('--model=')) || '').split('=')[1] || 'deepseek-chat'
+const dryRun = args.includes('--dry-run')
+
+// —— AI 系统提示词（与后台 aiSystemPrompt 同款，模板规则一致）——
+function aiSystemPrompt(tmpl) {
+  const tmplName = tmpl === 'deal' ? '好物带货' : tmpl === 'guide' ? '攻略' : tmpl === 'faq' ? '问答' : '通用'
+  const tmplRule = tmpl === 'deal'
+    ? 'content 必须包含：1 个 price 块（从原始信息提取价格/原价/规格）、1 个 list 卖点块（3-4 条）、1 个 quote 提示块（tone 用 "warn"，写"价格与库存可能随时变化，以页面显示为准"）、2-3 个 text 段落、1 个 ad 软文块（label 如"推荐"，link 用第一个跳转链接）'
+    : tmpl === 'guide'
+      ? 'content 用 h2 小标题 + text 段落 + list 要点组织，至少 2 个 h2，步骤清晰'
+      : tmpl === 'faq'
+        ? 'content 用 text 段落为主，faq 至少 3 条且问题口语化贴近真实提问'
+        : 'content 用 text 段落为主，可含 1 个 h2 小标题、1 个 list 要点、1 个 ad 软文块'
+  return `你是中文内容编辑。用户会给你一条或多条商品/文章原始信息（可能凌乱、信息不全、有错别字）。请完成三件事：
+1) 去 AI 味：改写为自然口语化的中文，删掉"首先/其次/值得一提的是/总的来说"等套话，避免对仗排比、每段首句总起的机器结构，多用短句和"你"；
+2) 信息完善：商品类文章要突出价格/券后价/规格/卖点/适用场景/送礼或自用建议；可合理补一句真实感的口语化推荐，但不要编造不存在的参数、疗效或承诺；
+3) 结构化输出：只输出一个 JSON 对象（不要任何多余文字、不要 markdown 代码块），schema 如下：
+{"title":"标题（15字内，含价格和核心卖点）","summary":"一句话摘要（含价格）","content":[块对象],"tags":["标签1","标签2","标签3"],"faq":[{"q":"常见问题","a":"简短回答"}],"links":[{"label":"按钮文字","url":"https://..."}]}
+可用块对象类型：text（段落，字段 text）/ h2（小标题，字段 text）/ list（要点列表，字段 items:[]）/ price（价格卡，字段 price,original?,spec?）/ quote（提示框，字段 text,tone:"warn"|"info"）/ ad（软文，字段 label,text,link?）。
+模板要求：当前文章模板是「${tmplName}」，content 必须按以下要求组织——
+${tmplRule}
+links 保留用户给的所有跳转链接（label 可用"领券/抢购/下单"等），tags 3-5 个，faq 2-4 条。如果原始信息里有明确过期时间，写入 expiresAt 字段。`
+}
+
+function log(...a) { console.log(new Date().toISOString(), ...a) }
+
+// —— 工具 ——
+function getKey() {
+  const raw = readFileSync(KEY_FILE, 'utf-8').trim()
+  return raw.replace(/^MANAGE_KEY=/, '')
+}
+function extractJson(text) {
+  const t = text.trim()
+  try { return JSON.parse(t) } catch { /* fallthrough */ }
+  const mc = t.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (mc) { try { return JSON.parse(mc[1].trim()) } catch { /* fallthrough */ } }
+  const start = t.indexOf('{')
+  const end = t.lastIndexOf('}')
+  if (start >= 0 && end > start) { try { return JSON.parse(t.slice(start, end + 1)) } catch { /* fallthrough */ } }
+  return null
+}
+async function aiGenerate(raw, tmpl) {
+  const res = await fetch(`${TFG}/chat/completions`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(180000),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: aiSystemPrompt(tmpl) },
+        { role: 'user', content: `原始信息：\n${JSON.stringify(raw, null, 2)}` },
+      ],
+      stream: false,
+    }),
+  })
+  if (!res.ok) throw new Error(`AI 网关 HTTP ${res.status}`)
+  const data = await res.json()
+  const text = data?.choices?.[0]?.message?.content || ''
+  const parsed = extractJson(text)
+  if (!parsed) throw new Error('AI 返回无法解析为 JSON')
+  return parsed
+}
+async function apiFetch(pathname, opts = {}) {
+  const key = getKey()
+  const url = pathname.includes('?') ? `${SITE}${pathname}&key=${key}` : `${SITE}${pathname}?key=${key}`
+  const res = await fetch(url, opts)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(`API HTTP ${res.status}: ${JSON.stringify(data).slice(0, 200)}`)
+  return data
+}
+async function batchCreate(list) {
+  return apiFetch('/api/admin/articles/batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ articles: list }),
+  })
+}
+
+// —— 主流程 ——
+async function main() {
+  const { list } = await apiFetch('/api/admin/seeds?status=pending&size=10')
+  if (!list || !list.length) {
+    log('[skip] 素材池没有待处理素材')
+    return
+  }
+  log(`拉取 ${list.length} 条 pending 素材，模型 ${model}，dry-run=${dryRun}`)
+
+  let created = 0
+  let failed = 0
+  for (const s of list) {
+    const raw = s.raw || ''
+    if (!raw || raw.length < 8) {
+      if (!dryRun) await apiFetch(`/api/admin/seeds/${s.id}/fail`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: '素材过短' }) })
+      failed++
+      continue
+    }
+    const tmpl = s.template || 'deal'
+    try {
+      log(`[#${s.id}] AI 生成中…`)
+      const a = await aiGenerate(raw, tmpl)
+      const item = {
+        title: String(a.title || '').trim(),
+        summary: String(a.summary || ''),
+        content: Array.isArray(a.content) ? a.content : [],
+        template: tmpl,
+        category: s.category || '优惠',
+        tags: Array.isArray(a.tags) ? a.tags : [],
+        faq: Array.isArray(a.faq) ? a.faq : [],
+        links: Array.isArray(a.links) ? a.links : [],
+        expiresAt: a.expiresAt || s.expiresAt || null,
+        publishAt: s.publishAt || null,
+        status: s.publishAt ? 'draft' : 'published',
+      }
+      if (!item.title || !item.content.length) throw new Error('AI 结果缺 title/content')
+      if (dryRun) {
+        log(`[#${s.id}] [dry-run] 将生成：${item.title}`)
+        created++
+        continue
+      }
+      const r = await batchCreate([item])
+      if (r.safetyHits?.length) log(`[#${s.id}] ⚠ 命中内容安全规则转待审`)
+      const articleId = r.results?.[0]?.id
+      await apiFetch(`/api/admin/seeds/${s.id}/done`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ articleId }) })
+      created++
+      log(`[#${s.id}] ✓ ${item.title} → ${articleId}`)
+    } catch (e) {
+      failed++
+      log(`[#${s.id}] ✗ ${e.message}`)
+      if (!dryRun) {
+        await apiFetch(`/api/admin/seeds/${s.id}/fail`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: e.message }) }).catch(() => {})
+      }
+    }
+  }
+  log(`完成：成功 ${created}，失败 ${failed}${dryRun ? '（dry-run 未入库）' : ''}`)
+}
+
+main().catch((e) => { console.error('[fatal]', e); process.exit(1) })
