@@ -118,24 +118,18 @@
 
 ### 定时 AI 流水线（每天自动产文入库）
 
-不想手动点后台时，用 **Windows 定时任务 + 本地 AI 网关** 自动消化素材：
+用 **Windows 定时任务 + 本地 AI 网关** 自动消化云端素材池（不再用本地 JSON）：
 
-1. **放素材**：把原始文案写进 `E:\code\article-site\scheduled-seeds.json`：
+1. **放素材**（三种渠道，任选）：
+   - 后台「素材队列」tab 粘贴原始文案（多条用空行分隔）；
+   - 后台「数据统计」的今日搜索词 Top10 点「转素材」（热搜一键进队列）；
+   - 用户在前台搜索无结果时提交选题（`/api/submit-topic`，带来源标记 `用户投稿`，同设备 24h 限 5 条防刷）。
 
-   ```json
-   [
-     { "raw": "蒙牛特仑苏低脂牛奶 250ml×16盒 44.9元 领券直降…",
-       "category": "好物", "template": "deal",
-       "publishAt": "2026-09-30T08:00:00.000Z",  // 可选：未来时间=定时草稿；缺省=立即发布
-       "expiresAt": "2026-12-31" }
-   ]
-   ```
+2. **已注册定时任务**：`ArticleSite-AIGenerate`（Windows 任务计划）**每天 08:00** 自动运行 `node scripts/scheduled-generate.mjs`——拉取线上 `pending` 素材（每次最多 10 条）→ 本地网关去 AI 味+结构化（**引流文方向**：干货主体+软文链接，引流文不写过期时间）→ 批量入库 → 素材标记 done（失败标 failed 可后台重试）。
 
-   `raw` 必填（京东/淘宝/拼多多文案、链接都行），`category`/`template`/`publishAt`/`expiresAt` 可选。
+3. **运行监控（黑盒已打通）**：脚本每次运行（含失败、素材池为空）自动上报一条运行日志到 `run_logs` 表，后台「数据统计 → 定时流水线（最近 7 次）」可见：时间/模型/成功数/失败数/失败原因。**每天 8 点后先看这里，确认今天自动发文是否正常**。发布侧另外可看「文章管理 → 只看今天发布」。
 
-2. **已注册定时任务**：`ArticleSite-AIGenerate`（Windows 任务计划）**每天 08:00** 自动运行 `node scripts/scheduled-generate.mjs`——逐条调本地网关去 AI 味+结构化 → 线上批量入库 → 内容安全命中自动转待审 → **成功后素材自动从文件移除**（失败条目保留，日志见控制台/任务历史）。
-
-3. 手动跑一次 / 换模型 / 只生成不入库：
+4. 手动跑一次 / 换模型 / 只生成不入库：
 
    ```powershell
    node scripts/scheduled-generate.mjs                # 默认 deepseek-chat
@@ -143,7 +137,18 @@
    node scripts/scheduled-generate.mjs --dry-run      # 只生成，不入库不消费素材
    ```
 
-4. 改时间：`schtasks /Change /TN ArticleSite-AIGenerate /ST 09:30`（或任务计划程序图形界面）。网关没启动时脚本会失败，素材保留等下次。
+5. 改时间：`schtasks /Change /TN ArticleSite-AIGenerate /ST 09:30`（或任务计划程序图形界面）。网关没启动时脚本会失败并上报失败日志，素材保留等下次。
+
+### 运营闭环（纠错 / 反馈 / 投稿）
+
+- **文章纠错**：前台每篇文章「纠错」按钮 → `reports` 表（同设备同文章 10 分钟限 1 条防刷）→ 后台「数据统计 → 待处理反馈」一键「已处理」。
+- **即将过期**：后台看板列出 7 天内到期的已发布文章（引流文无过期时间，天然不在内），到期自动下架无需人工。
+- **公开投稿**：前台搜索无结果 → 提交选题 → 素材队列（标记 `用户投稿`）→ 次日 8 点自动生成文章。
+- **评论管理**：Waline 独立部署于 `comments.wcbblll.cc`（后台 `https://comments.wcbblll.cc/ui`，账号 admin@wcbblll.cc）；主站后台顶栏有「评论管理 ↗」直达入口。
+
+### 外链规范
+
+详情页全部外链（购买按钮/更多好物/软文 ad 块）统一 `rel="noopener nofollow sponsored"`（防权重流失 + 安全），点击仍走 sendBeacon 异步统计。
 
 ### 内容安全审核（先审后发）
 
