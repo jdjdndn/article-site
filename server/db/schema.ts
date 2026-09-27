@@ -99,3 +99,18 @@ export const searchLogs = sqliteTable('search_logs', {
 ])
 
 export type SearchLog = typeof searchLogs.$inferSelect
+
+// 文章纠错反馈（用户举报信息有误/失效；后台可查看标记处理）
+export const reports = sqliteTable('reports', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  articleId: text('article_id').notNull(),
+  fp: text('fp').notNull().default(''),
+  content: text('content').notNull(),
+  status: text('status').notNull().default('open'), // open / done
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (t) => [
+  index('idx_reports_status').on(t.status),
+])
+
+export type Report = typeof reports.$inferSelect

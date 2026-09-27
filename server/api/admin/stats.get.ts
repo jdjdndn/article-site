@@ -1,7 +1,7 @@
 import { defineEventHandler } from 'h3'
 import { requireAdmin } from '../../utils/auth'
 import { useDb } from '../../utils/db'
-import { articles, clickLogs, seeds, searchLogs } from '../../db/schema'
+import { articles, clickLogs, seeds, searchLogs, reports } from '../../db/schema'
 import { sql } from 'drizzle-orm'
 
 // GET /api/admin/stats?key=xxx —— 后台看板（聚合查询，admin-only，量级小）
@@ -50,6 +50,20 @@ export default defineEventHandler(async (event) => {
     GROUP BY q ORDER BY n DESC LIMIT 10`)
   const topSearches = (searchRes.results || []) as { q: string; n: number }[]
 
+  // 即将过期（7 天内到期的已发布文章；引流文无 expires_at 天然不在内）
+  const expRes = await db.run(sql`
+    SELECT id, title, expires_at FROM articles
+    WHERE status = 'published' AND expires_at IS NOT NULL
+      AND expires_at <= datetime('now', '+7 days')
+    ORDER BY expires_at ASC LIMIT 20`)
+  const expiringSoon = (expRes.results || []) as { id: string; title: string; expires_at: string }[]
+
+  // 待处理反馈数
+  const [openReports] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(reports)
+    .where(sql`status = 'open'`)
+
   const statusMap: Record<string, number> = {}
   for (const r of byStatus) statusMap[r.status || '?'] = r.n
 
@@ -64,5 +78,7 @@ export default defineEventHandler(async (event) => {
     topClicks,
     todaySearches: todaySearches?.n ?? 0,
     topSearches,
+    expiringSoon,
+    openReports: openReports?.n ?? 0,
   }
 })

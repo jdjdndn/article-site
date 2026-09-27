@@ -37,9 +37,10 @@ useHead(() => ({
   }],
 }))
 
-// 分类 tab（配置驱动：app/config/site.ts）
+// 分类 tab（配置驱动：app/config/site.ts）；counts 用于空分类置灰
 import { SITE_CATEGORIES, SITE_BANNERS } from '../config/site'
 const categories = ref([...SITE_CATEGORIES])
+const { data: catCounts } = await useFetch('/api/categories', { key: 'cat-counts' })
 const active = ref('全部')
 const perPage = 20
 
@@ -134,7 +135,9 @@ watch(
         v-for="c in categories"
         :key="c"
         class="tab"
-        :class="{ active: !isSearching && active === c }"
+        :class="{ active: !isSearching && active === c, empty: !(catCounts?.counts?.[c]) }"
+        :disabled="!(catCounts?.counts?.[c])"
+        :title="(catCounts?.counts?.[c]) ? '' : '该分类内容整理中'"
         @click="switchTab(c)"
       >{{ c }}</button>
     </div>
@@ -292,6 +295,8 @@ watch(
 @media (max-width: 600px) {
   .tab { padding: 6px 13px; font-size: 13px; }
   .search-btn { padding: 11px 16px; }
+.tab:disabled { opacity: .45; cursor: not-allowed; }
+.tab:disabled:hover { background: transparent; color: var(--text-muted); box-shadow: none; transform: none; }
   .article-item { padding: 15px 16px; }
 }
 </style>

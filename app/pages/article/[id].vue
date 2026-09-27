@@ -122,6 +122,32 @@ async function copyLink() {
   copyFail.value = url
 }
 
+// 纠错反馈（信息有误/链接失效 → 后台查看）
+const reportOpen = ref(false)
+const reportText = ref('')
+const reportMsg = ref('')
+const reportSending = ref(false)
+async function submitReport() {
+  const content = reportText.value.trim()
+  if (content.length < 2) { reportMsg.value = '请填写要反馈的内容（如：价格已变 / 链接失效）'; return }
+  reportSending.value = true
+  reportMsg.value = ''
+  try {
+    await $fetch(`/api/articles/${id.value}/report`, {
+      method: 'POST',
+      body: { fp: getFp(), content },
+    })
+    reportOpen.value = false
+    reportText.value = ''
+    shareDone.value = true
+    setTimeout(() => (shareDone.value = false), 2000)
+  } catch (e: any) {
+    reportMsg.value = e?.data?.statusMessage || '提交失败，请重试'
+  } finally {
+    reportSending.value = false
+  }
+}
+
 // GEO：JSON-LD（Article 全字段 + BreadcrumbList + FAQPage）
 useHead(() => {
   // 下架页禁止收录（410 语义页，避免搜索引擎收录死链）
@@ -226,6 +252,18 @@ useHead(() => {
           @click="toggleFavorite"
         >{{ favorited ? '★ 已收藏' : '☆ 收藏' }}（{{ favoriteCount }}）</button>
         <button class="share-btn" @click="copyLink">{{ shareDone ? '✓ 已复制' : '🔗 分享' }}</button>
+        <button class="report-btn" @click="reportOpen = true">纠错</button>
+      </div>
+      <div v-if="reportOpen" class="report-mask" @click.self="reportOpen = false">
+        <div class="report-panel">
+          <h3>信息有误？告诉我们</h3>
+          <textarea v-model="reportText" rows="3" maxlength="500" placeholder="如：价格已变化 / 链接失效 / 描述不准确…"></textarea>
+          <p v-if="reportMsg" class="report-msg">{{ reportMsg }}</p>
+          <div class="report-actions">
+            <button class="tip-close" @click="reportOpen = false">取消</button>
+            <button class="mini primary" :disabled="reportSending || reportText.trim().length < 2" @click="submitReport">{{ reportSending ? '提交中…' : '提交反馈' }}</button>
+          </div>
+        </div>
       </div>
       <div v-if="copyFail" class="copy-fail-tip">
         <p>复制失败，请长按下面链接手动复制：</p>
@@ -438,6 +476,48 @@ useHead(() => {
   padding: 8px 10px;
   user-select: all;
 }
+.report-btn {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-muted);
+  transition: all .2s;
+}
+.report-btn:hover { border-color: #f59e0b; color: #b45309; background: #fffbeb; }
+.report-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .35);
+  z-index: 110;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.report-panel {
+  width: min(92vw, 420px);
+  background: #fff;
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .2);
+}
+.report-panel h3 { margin: 0 0 10px; font-size: 15px; color: var(--text); }
+.report-panel textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+}
+.report-msg { color: #dc2626; font-size: 12px; margin: 8px 0 0; }
+.report-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 12px; }
+.report-actions .mini { padding: 6px 18px; }
 .copy-fail-tip .tip-close {
   margin-top: 10px;
   padding: 6px 18px;

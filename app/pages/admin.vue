@@ -185,25 +185,19 @@ function extractJson(text: string): any {
   if (mc) { try { return JSON.parse(mc[1].trim()) } catch { /* fallthrough */ } }
   return null
 }
-// 按模板生成 AI 系统提示词（单篇完善 / 批量流水线共用）
-function aiSystemPrompt(tmpl: string): string {
-  const tmplName = tmpl === 'deal' ? '好物带货' : tmpl === 'guide' ? '攻略' : tmpl === 'faq' ? '问答' : '通用'
-  const tmplRule = tmpl === 'deal'
-    ? 'content 必须包含：1 个 price 块（从原始信息提取价格/原价/规格）、1 个 list 卖点块（3-4 条）、1 个 quote 提示块（tone 用 "warn"，写"价格与库存可能随时变化，以页面显示为准"）、2-3 个 text 段落、1 个 ad 软文块（label 如"推荐"，link 用第一个跳转链接）'
-    : tmpl === 'guide'
-      ? 'content 用 h2 小标题 + text 段落 + list 要点组织，至少 2 个 h2，步骤清晰'
-      : tmpl === 'faq'
-        ? 'content 用 text 段落为主，faq 至少 3 条且问题口语化贴近真实提问'
-        : 'content 用 text 段落为主，可含 1 个 h2 小标题、1 个 list 要点、1 个 ad 软文块'
-  return `你是中文内容编辑。用户会给你一条或多条商品/文章原始信息（可能凌乱、信息不全、有错别字）。请完成三件事：
-1) 去 AI 味：改写为自然口语化的中文，删掉"首先/其次/值得一提的是/总的来说"等套话，避免对仗排比、每段首句总起的机器结构，多用短句和"你"；
-2) 信息完善：商品类文章要突出价格/券后价/规格/卖点/适用场景/送礼或自用建议；可合理补一句真实感的口语化推荐，但不要编造不存在的参数、疗效或承诺；
-3) 结构化输出：只输出一个 JSON 对象（不要任何多余文字、不要 markdown 代码块），schema 如下：
-{"title":"标题（15字内，含价格和核心卖点）","summary":"一句话摘要（含价格）","content":[块对象],"tags":["标签1","标签2","标签3"],"faq":[{"q":"常见问题","a":"简短回答"}],"links":[{"label":"按钮文字","url":"https://..."}]}
-可用块对象类型：text（段落，字段 text）/ h2（小标题，字段 text）/ list（要点列表，字段 items:[]）/ price（价格卡，字段 price,original?,spec?）/ quote（提示框，字段 text,tone:"warn"|"info"）/ ad（软文，字段 label,text,link?）。
-模板要求：当前文章模板是「${tmplName}」，content 必须按以下要求组织——
-${tmplRule}
-links 保留用户给的所有跳转链接（label 可用"领券/抢购/下单"等），tags 3-5 个，faq 2-4 条。如果原始信息里有明确过期时间，写入 expiresAt 字段。`
+// AI 系统提示词（引流文方向：干货主体 + 软文链接；单篇完善 / 批量流水线共用）
+function aiSystemPrompt(_tmpl: string): string {
+  return `你是中文内容编辑，专职把原始素材写成"引流文"——以攻略、经验、干货、教程为主体，让读者觉得有用、愿意读完，再自然带出跳转链接（软文），不要写成硬邦邦的商品广告清单。
+用户会给你一条或多条原始信息（可能凌乱、信息不全、有错别字）。请完成四件事：
+1) 去 AI 味：自然口语化，删掉"首先/其次/值得一提的是/总的来说"等套话，避免对仗排比、每段首句总起的机器结构，多用短句和"你"；
+2) 干货组织：把素材扩写成有实际阅读价值的内容——攻略给步骤/避坑/对比，资讯给背景/要点/判断，问答贴近真实提问。可合理补充常识性建议，但不要编造参数、疗效、承诺或不存在的事实；
+3) 自动分类：从 ["优惠","攻略","好物","副业"] 中选最合适的 category；从 ["guide","faq","default"] 中选 template（操作攻略→guide、答疑→faq、资讯/经验→default）。只有素材是纯商品清单（价格+卖点+链接）才选 "deal" 并按"选购攻略"写；
+4) 结构化输出：只输出一个 JSON 对象（不要多余文字、不要 markdown 代码块），schema 如下：
+{"title":"标题（18字内，突出价值点而非价格）","summary":"一句话摘要（突出能帮读者解决什么）","category":"优惠/攻略/好物/副业之一","template":"guide/faq/default/deal之一","content":[块对象],"tags":["标签1","标签2","标签3"],"faq":[{"q":"常见问题","a":"简短回答"}],"links":[{"label":"按钮文字","url":"https://..."}]}
+可用块对象类型：text（段落，字段 text）/ h2（小标题，字段 text）/ list（要点列表，字段 items:[]）/ quote（提示框，字段 text,tone:"warn"|"info"）/ ad（软文块，字段 label,text,link?）/ price（价格卡，仅 deal 用）。
+内容要求：template 为 guide → 至少 2 个 h2、步骤化 list、含避坑点；faq → text 段落为主、faq 至少 3 条且口语化；default → 2-3 个 text 段落 + 可 1 个 h2 + 1 个 list；deal → 选购攻略式（怎么选、适合谁、注意事项）+ 1 个 price 块 + 1 个 ad 软文块。文章结尾放 1 个 ad 软文块（label 如"去看看"，link 用素材里给的跳转链接；素材无链接就不放 ad）。
+links 保留素材给的全部跳转链接（label 可用"去看看/了解详情"等，不要堆"领券/抢购"这类带货词）。tags 3-5 个，faq 2-4 条。
+过期时间：引流文不写 expiresAt（攻略/经验类文章不过期）；仅当素材含明确的限时信息（如"活动截止 10 月 31 日"）才写 expiresAt。`
 }
 
 // —— 批量录入流水线：粘贴 → 切分 → AI 逐条生成 → 勾选 → 批量入库 ——
@@ -495,6 +489,26 @@ function exportArticles() {
   const qs = new URLSearchParams(location.search)
   window.open('/api/admin/export?status=published&' + qs.toString(), '_blank')
 }
+// 用户纠错反馈列表
+const reports = ref<any[]>([])
+async function loadReports() {
+  const res = await api('/api/admin/reports?status=open&size=50')
+  reports.value = res.list || []
+}
+async function markReportDone(r: any) {
+  await api(`/api/admin/reports/${r.id}`, { method: 'PUT' })
+  reports.value = reports.value.filter((x: any) => x.id !== r.id)
+  if (stats.value) stats.value.openReports = (stats.value.openReports || 1) - 1
+}
+// 热搜词一键转素材（进素材队列，流水线自动生成引流文）
+async function seedFromSearch(q: string) {
+  await api('/api/admin/seeds', {
+    method: 'POST',
+    body: { items: [{ raw: `选题：${q}（用户热搜，写一篇实用攻略/干货引流文）` }] },
+  })
+  flash(`「${q}」已加入素材队列`)
+  if (stats.value) stats.value.pendingSeeds = (stats.value.pendingSeeds || 0) + 1
+}
 
 // —— 删除 / 回收站 ——
 async function softDelete(a: any) {
@@ -523,7 +537,7 @@ function switchTab(t: 'list' | 'trash' | 'review' | 'links' | 'seeds' | 'stats')
   else if (t === 'review') loadReview()
   else if (t === 'links') loadLinks()
   else if (t === 'seeds') loadSeeds()
-  else loadStats()
+  else { loadStats(); loadReports() }
 }
 
 // 初始加载
@@ -973,11 +987,25 @@ if (key.value) loadList()
               <div class="num">{{ stats.todaySearches }}</div>
               <div class="label">今日搜索</div>
             </div>
+            <div class="stat">
+              <div class="num">{{ stats.openReports }}</div>
+              <div class="label">待处理反馈</div>
+            </div>
           </div>
           <div class="stats-actions">
             <button class="mini primary" @click="exportArticles">导出已发布文章（JSON）</button>
             <span class="hint">全量导出含 content/faq/links，方便迁移备份</span>
           </div>
+
+          <h3 class="stats-title">即将过期（7 天内到期）</h3>
+          <div v-if="!stats.expiringSoon?.length" class="hint">暂无临近过期的文章（引流文不过期）</div>
+          <ol v-else class="rank-list">
+            <li v-for="(e, i) in stats.expiringSoon" :key="e.id">
+              <span class="rank-no">{{ i + 1 }}</span>
+              <NuxtLink :to="`/article/${e.id}`" target="_blank" class="rank-title">{{ e.title }}</NuxtLink>
+              <span class="rank-n warn">到期 {{ e.expires_at?.slice(0, 10) }}</span>
+            </li>
+          </ol>
 
           <h3 class="stats-title">热门文章 Top10（点击）</h3>
           <div v-if="!stats.topClicks?.length" class="hint">暂无点击数据（详情页链接被点后统计）</div>
@@ -997,8 +1025,22 @@ if (key.value) loadList()
               <span class="rank-no">{{ i + 1 }}</span>
               <span class="rank-title">{{ s.q }}</span>
               <span class="rank-n">{{ s.n }} 次</span>
+              <button class="mini" @click="seedFromSearch(s.q)">转素材</button>
             </li>
           </ol>
+
+          <h3 class="stats-title">待处理反馈（纠错）</h3>
+          <div v-if="!reports.length" class="hint">暂无待处理反馈</div>
+          <div v-else class="report-list">
+            <div v-for="r in reports" :key="r.id" class="report-item">
+              <NuxtLink :to="`/article/${r.articleId}`" target="_blank" class="report-aid">{{ r.articleId }}</NuxtLink>
+              <div class="report-text">{{ r.content }}</div>
+              <div class="report-foot">
+                <span class="rank-n">{{ r.createdAt?.slice(0, 16).replace('T', ' ') }}</span>
+                <button class="mini primary" @click="markReportDone(r)">已处理</button>
+              </div>
+            </div>
+          </div>
 
           <h3 class="stats-title">分类分布（已发布）</h3>
           <div v-if="!stats.byCategory?.length" class="hint">暂无已发布文章</div>
@@ -1155,6 +1197,13 @@ if (key.value) loadList()
 .rank-title { flex: 1; color: var(--text); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 a.rank-title:hover { color: var(--primary); }
 .rank-n { color: var(--text-muted); font-size: 12px; flex-shrink: 0; }
+.rank-n.warn { color: #d97706; }
+.report-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.report-item { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 10px 12px; }
+.report-aid { color: var(--primary); font-size: 12px; text-decoration: none; }
+.report-text { font-size: 13px; color: var(--text); margin: 4px 0 6px; }
+.report-foot { display: flex; align-items: center; justify-content: space-between; }
+.report-foot .mini { padding: 3px 12px; }
 .pager { display: flex; gap: 12px; align-items: center; justify-content: center; margin-top: 14px; }
 .badge.kind-coupon { background: #fef3c7; color: #92400e; }
 .badge.kind-buy { background: var(--primary-weak); color: var(--primary); }
