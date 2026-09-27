@@ -1,10 +1,10 @@
 import { defineEventHandler } from 'h3'
 import { requireAdmin } from '../../utils/auth'
 import { useDb } from '../../utils/db'
-import { articles, clickLogs, seeds } from '../../db/schema'
+import { articles, clickLogs, seeds, searchLogs } from '../../db/schema'
 import { sql } from 'drizzle-orm'
 
-// GET /api/admin/stats?key=xxx —— 后台最小看板（聚合查询，admin-only，量级小）
+// GET /api/admin/stats?key=xxx —— 后台看板（聚合查询，admin-only，量级小）
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const db = useDb()
@@ -32,6 +32,24 @@ export default defineEventHandler(async (event) => {
     .from(seeds)
     .where(sql`status = 'pending'`)
 
+  // 文章级点击 Top10（join 文章信息）
+  const topRes = await db.run(sql`
+    SELECT c.article_id, count(*) AS n, MAX(a.title) AS title, MAX(a.category) AS category
+    FROM click_logs c LEFT JOIN articles a ON a.id = c.article_id
+    GROUP BY c.article_id ORDER BY n DESC LIMIT 10`)
+  const topClicks = (topRes.results || []) as { article_id: string; n: number; title: string | null; category: string | null }[]
+
+  // 搜索词统计（今日）
+  const [todaySearches] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(searchLogs)
+    .where(sql`created_at >= date('now')`)
+  const searchRes = await db.run(sql`
+    SELECT q, count(*) AS n FROM search_logs
+    WHERE created_at >= date('now')
+    GROUP BY q ORDER BY n DESC LIMIT 10`)
+  const topSearches = (searchRes.results || []) as { q: string; n: number }[]
+
   const statusMap: Record<string, number> = {}
   for (const r of byStatus) statusMap[r.status || '?'] = r.n
 
@@ -43,5 +61,8 @@ export default defineEventHandler(async (event) => {
     clicks: clicks?.n ?? 0,
     todayClicks: todayClicks?.n ?? 0,
     pendingSeeds: pendingSeeds?.n ?? 0,
+    topClicks,
+    todaySearches: todaySearches?.n ?? 0,
+    topSearches,
   }
 })

@@ -198,17 +198,42 @@
   `GET /api/admin/seeds?status=pending` 拉取 → 本机 AI 网关（免费网页版模型，去 AI 味+结构化）→
   `POST /api/admin/articles/batch` 入库 → 逐条标记 done/fail（失败原因入库）
 - 单次最多处理 10 条；素材可带 category/template/publishAt（定时）/expiresAt，全部传给 AI 模板与入库
+- **自动分类**：后台添加素材不选分类/模板时存 `auto`，定时流水线由 AI 自动判断（category 从 优惠/攻略/好物/副业 选，template 从 deal/guide/faq/default 选），显式指定优先
 - 手动跑：`node scripts/scheduled-generate.mjs`（`--dry-run` 只生成不入库，`--model=kimi` 换模型）
 
 ### 数据统计（后台最小看板）
 
-后台「数据统计」tab：文章总数/各状态分布/分类分布（条形图）/累计与今日点击/待生成素材。
+后台「数据统计」tab：文章总数/各状态分布/分类分布（条形图）/累计与今日点击/待生成素材/
+**热门文章 Top10（点击归因）**/**今日搜索词 Top10**。
 API `GET /api/admin/stats?key=`（聚合查询，admin-only，量级小不占资源）。
 
 ### 配置化
 
 - 分类 tab：`app/config/site.ts` 的 `SITE_CATEGORIES`（前台/后台/API 共用，新增分类改一行）
 - 首页公告条：`SITE_BANNERS`（text/link/highlight，可多条，空数组=隐藏）
+
+### 搜索词统计（内容方向反哺）
+
+`search_logs` 表记录前台搜索关键词（`/api/articles/search` 顺带写入，不阻塞查询），
+后台看板展示今日搜索词 Top10；cron 每 5 分钟清理 90 天前数据（量小）。
+
+### 内容批量导出
+
+后台「数据统计」tab「导出已发布文章（JSON）」按钮，或
+`GET /api/admin/export?key=&status=published` —— 全量导出含 content/faq/links/tags，
+供迁移、备份到第三方平台。
+
+### Cloudflare 限流（Dashboard 配置，无需改代码）
+
+公开写接口只有两个：`POST /api/track/click`（点击上报）、`POST /api/articles/*/favorite`（收藏）。
+建议在 Cloudflare Dashboard → Security → WAF → Rate limiting rules 加两条：
+
+| 规则 | 匹配表达式 | 阈值 | 动作 |
+|---|---|---|---|
+| track 防刷 | `(http.request.uri.path contains "/api/track/click")` | 60 次/分钟/IP | Block |
+| favorite 防刷 | `(http.request.uri.path contains "/favorite")` | 30 次/分钟/IP | Block |
+
+免费版 Rate Limiting 规则按账号维度计费（5 条免费规则），量级小，够用即可。
 
 ### 备份
 

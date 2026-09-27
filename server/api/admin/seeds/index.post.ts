@@ -20,8 +20,9 @@ export default defineEventHandler(async (event) => {
       if (!raw || raw.length < 8) return null
       return {
         raw,
-        category: typeof it.category === 'string' && it.category ? it.category : body?.category || '优惠',
-        template: ['deal', 'guide', 'faq', 'default'].includes(it.template) ? it.template : 'deal',
+        // 未显式指定分类/模板时存 'auto'，由定时流水线 AI 自动判断
+        category: typeof it.category === 'string' && it.category ? it.category : (body?.category || 'auto'),
+        template: ['deal', 'guide', 'faq', 'default'].includes(it.template) ? it.template : 'auto',
         publishAt: it.publishAt ? String(it.publishAt) : null,
         expiresAt: it.expiresAt ? String(it.expiresAt) : null,
         status: 'pending',

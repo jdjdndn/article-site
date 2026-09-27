@@ -26,24 +26,16 @@ const args = process.argv.slice(2)
 const model = (args.find((a) => a.startsWith('--model=')) || '').split('=')[1] || 'deepseek-chat'
 const dryRun = args.includes('--dry-run')
 
-// —— AI 系统提示词（与后台 aiSystemPrompt 同款，模板规则一致）——
-function aiSystemPrompt(tmpl) {
-  const tmplName = tmpl === 'deal' ? '好物带货' : tmpl === 'guide' ? '攻略' : tmpl === 'faq' ? '问答' : '通用'
-  const tmplRule = tmpl === 'deal'
-    ? 'content 必须包含：1 个 price 块（从原始信息提取价格/原价/规格）、1 个 list 卖点块（3-4 条）、1 个 quote 提示块（tone 用 "warn"，写"价格与库存可能随时变化，以页面显示为准"）、2-3 个 text 段落、1 个 ad 软文块（label 如"推荐"，link 用第一个跳转链接）'
-    : tmpl === 'guide'
-      ? 'content 用 h2 小标题 + text 段落 + list 要点组织，至少 2 个 h2，步骤清晰'
-      : tmpl === 'faq'
-        ? 'content 用 text 段落为主，faq 至少 3 条且问题口语化贴近真实提问'
-        : 'content 用 text 段落为主，可含 1 个 h2 小标题、1 个 list 要点、1 个 ad 软文块'
-  return `你是中文内容编辑。用户会给你一条或多条商品/文章原始信息（可能凌乱、信息不全、有错别字）。请完成三件事：
+// —— AI 系统提示词（去 AI 味 + 信息完善 + 自动分类 + 结构化；分类/模板由 AI 判断）——
+function aiSystemPrompt() {
+  return `你是中文内容编辑。用户会给你一条或多条商品/文章原始信息（可能凌乱、信息不全、有错别字）。请完成四件事：
 1) 去 AI 味：改写为自然口语化的中文，删掉"首先/其次/值得一提的是/总的来说"等套话，避免对仗排比、每段首句总起的机器结构，多用短句和"你"；
 2) 信息完善：商品类文章要突出价格/券后价/规格/卖点/适用场景/送礼或自用建议；可合理补一句真实感的口语化推荐，但不要编造不存在的参数、疗效或承诺；
-3) 结构化输出：只输出一个 JSON 对象（不要任何多余文字、不要 markdown 代码块），schema 如下：
-{"title":"标题（15字内，含价格和核心卖点）","summary":"一句话摘要（含价格）","content":[块对象],"tags":["标签1","标签2","标签3"],"faq":[{"q":"常见问题","a":"简短回答"}],"links":[{"label":"按钮文字","url":"https://..."}]}
+3) 自动分类：从 ["优惠","攻略","好物","副业"] 中选一个最合适的 category；从 ["deal","guide","faq","default"] 中选一个 template（带货种草→deal、操作指南→guide、答疑→faq、资讯/其他→default）——判断标准看原始内容形态；
+4) 结构化输出：只输出一个 JSON 对象（不要任何多余文字、不要 markdown 代码块），schema 如下：
+{"title":"标题（15字内，含价格和核心卖点）","summary":"一句话摘要（含价格）","category":"优惠/攻略/好物/副业之一","template":"deal/guide/faq/default之一","content":[块对象],"tags":["标签1","标签2","标签3"],"faq":[{"q":"常见问题","a":"简短回答"}],"links":[{"label":"按钮文字","url":"https://..."}]}
 可用块对象类型：text（段落，字段 text）/ h2（小标题，字段 text）/ list（要点列表，字段 items:[]）/ price（价格卡，字段 price,original?,spec?）/ quote（提示框，字段 text,tone:"warn"|"info"）/ ad（软文，字段 label,text,link?）。
-模板要求：当前文章模板是「${tmplName}」，content 必须按以下要求组织——
-${tmplRule}
+模板要求：你判断出的 template 若为 deal，content 必须包含：1 个 price 块、1 个 list 卖点块（3-4 条）、1 个 quote 提示块（tone 用 "warn"，写"价格与库存可能随时变化，以页面显示为准"）、2-3 个 text 段落、1 个 ad 软文块（label 如"推荐"，link 用第一个跳转链接）；若为 guide，content 用 h2 小标题 + text 段落 + list 要点组织，至少 2 个 h2，步骤清晰；若为 faq，content 用 text 段落为主，faq 至少 3 条且问题口语化贴近真实提问；其余用 text 段落为主，可含 1 个 h2、1 个 list、1 个 ad 软文块。
 links 保留用户给的所有跳转链接（label 可用"领券/抢购/下单"等），tags 3-5 个，faq 2-4 条。如果原始信息里有明确过期时间，写入 expiresAt 字段。`
 }
 
@@ -64,7 +56,7 @@ function extractJson(text) {
   if (start >= 0 && end > start) { try { return JSON.parse(t.slice(start, end + 1)) } catch { /* fallthrough */ } }
   return null
 }
-async function aiGenerate(raw, tmpl) {
+async function aiGenerate(raw) {
   const res = await fetch(`${TFG}/chat/completions`, {
     method: 'POST',
     signal: AbortSignal.timeout(180000),
@@ -72,7 +64,7 @@ async function aiGenerate(raw, tmpl) {
     body: JSON.stringify({
       model,
       messages: [
-        { role: 'system', content: aiSystemPrompt(tmpl) },
+        { role: 'system', content: aiSystemPrompt() },
         { role: 'user', content: `原始信息：\n${JSON.stringify(raw, null, 2)}` },
       ],
       stream: false,
@@ -119,16 +111,18 @@ async function main() {
       failed++
       continue
     }
-    const tmpl = s.template || 'deal'
     try {
       log(`[#${s.id}] AI 生成中…`)
-      const a = await aiGenerate(raw, tmpl)
+      const a = await aiGenerate(raw)
+      // 自动分类：素材显式指定优先，否则用 AI 判断结果
+      const category = s.category && s.category !== 'auto' ? s.category : (a.category || '优惠')
+      const template = s.template && s.template !== 'auto' ? s.template : (a.template || 'deal')
       const item = {
         title: String(a.title || '').trim(),
         summary: String(a.summary || ''),
         content: Array.isArray(a.content) ? a.content : [],
-        template: tmpl,
-        category: s.category || '优惠',
+        template,
+        category,
         tags: Array.isArray(a.tags) ? a.tags : [],
         faq: Array.isArray(a.faq) ? a.faq : [],
         links: Array.isArray(a.links) ? a.links : [],

@@ -490,6 +490,11 @@ function pct(n: number): string {
   const max = Math.max(1, ...(stats.value?.byCategory || []).map((c: any) => c.n))
   return Math.round((n / max) * 100) + '%'
 }
+function exportArticles() {
+  // 复用当前后台 URL 里的管理密钥参数
+  const qs = new URLSearchParams(location.search)
+  window.open('/api/admin/export?status=published&' + qs.toString(), '_blank')
+}
 
 // —— 删除 / 回收站 ——
 async function softDelete(a: any) {
@@ -964,7 +969,37 @@ if (key.value) loadList()
               <div class="num">{{ stats.pendingSeeds }}</div>
               <div class="label">待生成素材</div>
             </div>
+            <div class="stat">
+              <div class="num">{{ stats.todaySearches }}</div>
+              <div class="label">今日搜索</div>
+            </div>
           </div>
+          <div class="stats-actions">
+            <button class="mini primary" @click="exportArticles">导出已发布文章（JSON）</button>
+            <span class="hint">全量导出含 content/faq/links，方便迁移备份</span>
+          </div>
+
+          <h3 class="stats-title">热门文章 Top10（点击）</h3>
+          <div v-if="!stats.topClicks?.length" class="hint">暂无点击数据（详情页链接被点后统计）</div>
+          <ol v-else class="rank-list">
+            <li v-for="(c, i) in stats.topClicks" :key="c.article_id">
+              <span class="rank-no">{{ i + 1 }}</span>
+              <NuxtLink v-if="c.title" :to="`/article/${c.article_id}`" target="_blank" class="rank-title">{{ c.title }}</NuxtLink>
+              <span v-else class="rank-title muted">{{ c.article_id }}</span>
+              <span class="rank-n">{{ c.n }} 次</span>
+            </li>
+          </ol>
+
+          <h3 class="stats-title">今日搜索词 Top10</h3>
+          <div v-if="!stats.topSearches?.length" class="hint">今日暂无搜索</div>
+          <ol v-else class="rank-list">
+            <li v-for="(s, i) in stats.topSearches" :key="s.q">
+              <span class="rank-no">{{ i + 1 }}</span>
+              <span class="rank-title">{{ s.q }}</span>
+              <span class="rank-n">{{ s.n }} 次</span>
+            </li>
+          </ol>
+
           <h3 class="stats-title">分类分布（已发布）</h3>
           <div v-if="!stats.byCategory?.length" class="hint">暂无已发布文章</div>
           <div v-else class="cat-bars">
@@ -1110,6 +1145,16 @@ if (key.value) loadList()
 .bar { flex: 1; height: 10px; background: #f1f5f9; border-radius: 999px; overflow: hidden; }
 .bar-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--primary-strong)); border-radius: 999px; }
 .cat-n { width: 30px; text-align: right; color: var(--text-muted); }
+.stats-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.rank-list { list-style: none; margin: 0 0 18px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.rank-list li { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 6px 10px; border-radius: 8px; background: #f9fafb; }
+.rank-no { width: 20px; height: 20px; line-height: 20px; text-align: center; border-radius: 50%; background: var(--primary); color: #fff; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.rank-list li:nth-child(1) .rank-no { background: #f59e0b; }
+.rank-list li:nth-child(2) .rank-no { background: #94a3b8; }
+.rank-list li:nth-child(3) .rank-no { background: #b45309; }
+.rank-title { flex: 1; color: var(--text); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.rank-title:hover { color: var(--primary); }
+.rank-n { color: var(--text-muted); font-size: 12px; flex-shrink: 0; }
 .pager { display: flex; gap: 12px; align-items: center; justify-content: center; margin-top: 14px; }
 .badge.kind-coupon { background: #fef3c7; color: #92400e; }
 .badge.kind-buy { background: var(--primary-weak); color: var(--primary); }

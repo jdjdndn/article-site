@@ -1,10 +1,12 @@
 import { defineEventHandler, getQuery, createError } from 'h3'
 import { sql } from 'drizzle-orm'
 import { useDb, ensureFts } from '../../utils/db'
+import { searchLogs } from '../../db/schema'
 
 // GET /api/articles/search?q=xxx&limit=20
 // FTS5 全文搜索（trigram，中文子串匹配），长词走 MATCH，短词（<3 字）降级 LIKE
 // 过滤：仅 published 且未过期（排除 deleted / expired）
+// 顺带记录搜索词（search_logs，量小；cron 定期清理）
 export default defineEventHandler(async (event) => {
   const q = getQuery(event)
   const keyword = typeof q.q === 'string' ? q.q.trim() : ''
@@ -14,6 +16,11 @@ export default defineEventHandler(async (event) => {
 
   const db = useDb()
   await ensureFts()
+
+  // 记录搜索词（不阻塞主查询）
+  try {
+    await db.insert(searchLogs).values({ q: keyword.slice(0, 50), createdAt: new Date().toISOString() })
+  } catch { /* 记录失败不影响搜索 */ }
 
   // 过滤条件：已发布 + 未过期
   const base = `a.status = 'published' AND (a.expires_at IS NULL OR a.expires_at > datetime('now'))`

@@ -88,3 +88,14 @@ export const seeds = sqliteTable('seeds', {
 ])
 
 export type Seed = typeof seeds.$inferSelect
+
+// 搜索词日志（内容方向反哺；cron 定期清理 90 天前）
+export const searchLogs = sqliteTable('search_logs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  q: text('q').notNull(),
+  createdAt: text('created_at').notNull(),
+}, (t) => [
+  index('idx_search_created').on(t.createdAt),
+])
+
+export type SearchLog = typeof searchLogs.$inferSelect
