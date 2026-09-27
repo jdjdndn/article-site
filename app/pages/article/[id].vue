@@ -275,17 +275,24 @@ useHead(() => {
         <button class="share-btn" @click="copyLink">{{ shareDone ? '✓ 已复制' : '🔗 分享' }}</button>
         <button class="report-btn" @click="reportOpen = true">纠错</button>
       </div>
+      <Transition name="pop">
       <div v-if="reportOpen" class="report-mask" @click.self="reportOpen = false">
-        <div class="report-panel">
-          <h3>信息有误？告诉我们</h3>
+        <div class="report-panel" role="dialog" aria-modal="true" aria-label="纠错反馈">
+          <div class="report-head">
+            <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5h.01"/></svg>信息有误，反馈一下</h3>
+            <button class="report-x" @click="reportOpen = false" aria-label="关闭">✕</button>
+          </div>
+          <p class="report-desc">价格已变 / 链接失效 / 描述不准确，告诉我们，编辑会尽快核对修正。</p>
           <textarea v-model="reportText" rows="3" maxlength="500" placeholder="如：价格已变化 / 链接失效 / 描述不准确…"></textarea>
+          <div class="report-counter">{{ reportText.length }}/500</div>
           <p v-if="reportMsg" class="report-msg">{{ reportMsg }}</p>
           <div class="report-actions">
-            <button class="tip-close" @click="reportOpen = false">取消</button>
-            <button class="mini primary" :disabled="reportSending || reportText.trim().length < 2" @click="submitReport">{{ reportSending ? '提交中…' : '提交反馈' }}</button>
+            <button class="report-cancel" @click="reportOpen = false">取消</button>
+            <button class="report-submit" :disabled="reportSending || reportText.trim().length < 2" @click="submitReport">{{ reportSending ? '提交中…' : '提交反馈' }}</button>
           </div>
         </div>
       </div>
+      </Transition>
       <div v-if="copyFail" class="copy-fail-tip">
         <p>复制失败，请长按下面链接手动复制：</p>
         <code>{{ copyFail }}</code>
@@ -534,7 +541,9 @@ useHead(() => {
 .report-mask {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, .35);
+  background: rgba(15, 23, 42, .38);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   z-index: 110;
   display: flex;
   align-items: center;
@@ -544,24 +553,80 @@ useHead(() => {
 .report-panel {
   width: min(92vw, 420px);
   background: #fff;
-  border-radius: 14px;
-  padding: 18px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, .2);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, .22), 0 2px 10px rgba(15, 23, 42, .08);
 }
-.report-panel h3 { margin: 0 0 10px; font-size: 15px; color: var(--text); }
+.report-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.report-head h3 {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text);
+}
+.report-head h3 svg { width: 17px; height: 17px; color: var(--primary); }
+.report-x {
+  border: none;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 15px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 8px;
+  transition: color .2s, background .2s;
+}
+.report-x:hover { color: var(--text); background: #f3f4f6; }
+.report-desc { margin: 0 0 12px; font-size: 13px; color: var(--text-muted); line-height: 1.5; }
 .report-panel textarea {
   width: 100%;
   box-sizing: border-box;
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 10px;
+  padding: 10px 12px;
   font-size: 13px;
   font-family: inherit;
   resize: vertical;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
 }
-.report-msg { color: #dc2626; font-size: 12px; margin: 8px 0 0; }
+.report-panel textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
+.report-counter { text-align: right; font-size: 11px; color: #9ca3af; margin-top: 4px; }
+.report-msg { color: #dc2626; font-size: 12px; margin: 6px 0 0; }
 .report-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 12px; }
-.report-actions .mini { padding: 6px 18px; }
+.report-cancel {
+  padding: 8px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all .2s;
+}
+.report-cancel:hover { border-color: #d1d5db; color: var(--text); background: #f9fafb; }
+.report-submit {
+  padding: 8px 20px;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(180deg, var(--primary), var(--primary-strong));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, .25);
+  transition: opacity .2s, transform .15s;
+}
+.report-submit:hover:not(:disabled) { opacity: .92; }
+.report-submit:active:not(:disabled) { transform: translateY(1px); }
+.report-submit:disabled { opacity: .5; cursor: not-allowed; }
+/* 弹窗入场/离场动画 */
+.pop-enter-active, .pop-leave-active { transition: opacity .2s ease; }
+.pop-enter-active .report-panel, .pop-leave-active .report-panel { transition: transform .22s ease, opacity .22s ease; }
+.pop-enter-from, .pop-leave-to { opacity: 0; }
+.pop-enter-from .report-panel, .pop-leave-to .report-panel { transform: translateY(12px) scale(.97); opacity: 0; }
 .copy-fail-tip .tip-close {
   margin-top: 10px;
   padding: 6px 18px;

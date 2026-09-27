@@ -4,9 +4,18 @@
       <div class="container header-inner">
         <NuxtLink to="/" class="logo"><span class="logo-badge">文</span>AI 文章站</NuxtLink>
         <nav class="nav">
-          <NuxtLink to="/" class="nav-link">首页</NuxtLink>
-          <NuxtLink to="/favorites" class="nav-link">收藏</NuxtLink>
-          <NuxtLink to="/about" class="nav-link">关于</NuxtLink>
+          <NuxtLink to="/" class="nav-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>
+            <span>首页</span>
+          </NuxtLink>
+          <NuxtLink to="/favorites" class="nav-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.9-5.2-2.7-5.2 2.7 1-5.9L3.5 9.7l5.9-.9z"/></svg>
+            <span>收藏</span>
+          </NuxtLink>
+          <NuxtLink to="/about" class="nav-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5h.01"/></svg>
+            <span>关于</span>
+          </NuxtLink>
           <!-- 后台入口已隐藏：通过 https://www.wcbblll.cc/admin?key=xxx 直接访问 -->
         </nav>
       </div>
@@ -69,15 +78,25 @@
 
 .nav { display: flex; align-items: center; gap: 4px; }
 .nav-link {
-  padding: 6px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
   border-radius: 999px;
   color: var(--text-muted);
   text-decoration: none;
   font-size: 14px;
-  transition: color .2s, background .2s;
+  line-height: 1;
+  transition: color .2s, background .2s, box-shadow .2s;
 }
+.nav-link svg { width: 15px; height: 15px; opacity: .85; }
 .nav-link:hover { color: var(--primary); background: var(--primary-weak); }
-.nav-link.router-link-active { color: var(--primary); background: var(--primary-weak); font-weight: 600; }
+.nav-link.router-link-active {
+  color: var(--primary);
+  background: var(--primary-weak);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, .18);
+}
 
 main { flex: 1; padding: 28px 0 48px; }
 
@@ -106,6 +125,7 @@ main { flex: 1; padding: 28px 0 48px; }
   .logo { font-size: 17px; gap: 6px; }
   .logo-badge { width: 26px; height: 26px; font-size: 13px; border-radius: 8px; }
   .nav { gap: 2px; }
-  .nav-link { padding: 5px 9px; font-size: 13px; }
+  .nav-link { padding: 6px 10px; font-size: 13px; gap: 4px; }
+  .nav-link svg { width: 14px; height: 14px; }
 }
 </style>
