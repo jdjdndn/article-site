@@ -1,2 +1,25 @@
+# 默认：全部放行
 User-Agent: *
-Disallow:
+Allow: /
+
+# ---- AI 生成式引擎爬虫（GEO：显式放行，不屏蔽）----
+User-Agent: GPTBot
+Allow: /
+
+User-Agent: ClaudeBot
+Allow: /
+
+User-Agent: PerplexityBot
+Allow: /
+
+User-Agent: Bytespider
+Allow: /
+
+User-Agent: CCBot
+Allow: /
+
+User-Agent: Google-Extended
+Allow: /
+
+# 后台不收录
+Disallow: /admin

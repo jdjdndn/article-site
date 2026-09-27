@@ -1,0 +1,22 @@
+{
+  "name": "article-site",
+  "compatibility_date": "2026-09-27",
+  "main": "./dist/_worker.js",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_id": "9051caef-e987-4a47-ae8c-2f91496b1a82",
+      "database_name": "article-db"
+    }
+  ],
+  "routes": [
+    {
+      "pattern": "www.wcbblll.cc",
+      "custom_domain": true
+    }
+  ]
+}

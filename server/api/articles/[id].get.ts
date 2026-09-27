@@ -1,10 +1,10 @@
-import { defineEventHandler, getRouterParam, createError } from 'h3'
+import { defineEventHandler, getRouterParam, getQuery, createError } from 'h3'
 import { eq, and, sql, desc } from 'drizzle-orm'
 import { useDb } from '../../utils/db'
-import { articles } from '../../db/schema'
+import { articles, favorites } from '../../db/schema'
 
 // GET /api/articles/:id
-// 返回完整文章 + related（6.2 判定：related_ids → 标签重叠 → 同分类兜底）
+// 返回完整文章 + related（6.2 判定：related_ids → 标签重叠 → 同分类兜底）+ 收藏状态（?fp= 可选）
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, message: 'missing id' })
@@ -17,6 +17,23 @@ export default defineEventHandler(async (event) => {
     .limit(1)
 
   if (!article) throw createError({ statusCode: 404, message: '文章不存在或已下架' })
+
+  // 收藏统计 + 当前设备是否已收藏
+  const [fav] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(favorites)
+    .where(eq(favorites.articleId, id))
+  const q = getQuery(event)
+  const fp = typeof q.fp === 'string' && q.fp ? q.fp.slice(0, 128) : ''
+  let favorited = false
+  if (fp) {
+    const [mine] = await db
+      .select({ id: favorites.id })
+      .from(favorites)
+      .where(and(eq(favorites.articleId, id), eq(favorites.deviceFp, fp)))
+      .limit(1)
+    favorited = !!mine
+  }
 
   // 相关文章：related_ids 优先
   let related: any[] = []
@@ -52,7 +69,7 @@ export default defineEventHandler(async (event) => {
     faq: safeJson(article.faq),
   }
 
-  return { article: parsed, related }
+  return { article: parsed, related, favoriteCount: fav?.n ?? 0, favorited }
 })
 
 function safeJson(s: string | null, fallback: any = []) {

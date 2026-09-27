@@ -1,0 +1,40 @@
+import { defineEventHandler, getQuery, createError } from 'h3'
+import { and, eq, ne, desc, lt, sql } from 'drizzle-orm'
+import { requireAdmin } from '../../../utils/auth'
+import { useDb } from '../../../utils/db'
+import { articles } from '../../../db/schema'
+
+// GET /api/admin/articles?key=xxx&status=&cursor=&limit=
+// 后台文章列表：全部状态（不含已删，回收站走 /api/admin/trash），游标分页
+export default defineEventHandler(async (event) => {
+  requireAdmin(event)
+  const q = getQuery(event)
+  const status = typeof q.status === 'string' && q.status ? q.status : ''
+  const cursor = typeof q.cursor === 'string' ? q.cursor : ''
+  const limit = Math.min(Number(q.limit) || 20, 100)
+  const db = useDb()
+
+  const conds = [ne(articles.status, 'deleted')]
+  if (status) conds.push(eq(articles.status, status))
+  if (cursor) conds.push(lt(articles.updatedAt, cursor))
+
+  const list = await db
+    .select({
+      id: articles.id,
+      title: articles.title,
+      category: articles.category,
+      status: articles.status,
+      expiresAt: articles.expiresAt,
+      updatedAt: articles.updatedAt,
+    })
+    .from(articles)
+    .where(and(...conds))
+    .orderBy(desc(articles.updatedAt))
+    .limit(limit + 1)
+
+  const hasMore = list.length > limit
+  const rows = hasMore ? list.slice(0, limit) : list
+  const nextCursor = hasMore && rows.length ? rows[rows.length - 1].updatedAt : null
+
+  return { list: rows, nextCursor, hasMore }
+})
