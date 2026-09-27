@@ -828,7 +828,7 @@ if (key.value) loadList()
         <div v-if="!articles.length" class="empty">暂无文章（点"新建文章"创建第一篇）</div>
         <table v-else class="tbl">
           <thead>
-            <tr><th>标题</th><th>分类</th><th>状态</th><th>过期</th><th>更新时间</th><th>操作</th></tr>
+            <tr><th>标题</th><th>分类</th><th>状态</th><th>点击</th><th>过期</th><th>更新时间</th><th>操作</th></tr>
           </thead>
           <tbody>
             <tr v-for="a in articles" :key="a.id">
@@ -842,6 +842,7 @@ if (key.value) loadList()
                 <span v-if="a.needsReview" class="badge review">待审</span>
                 <span v-if="a.status === 'draft' && a.publishAt" class="badge scheduled">⏱ {{ a.publishAt.slice(0, 16).replace('T', ' ') }}</span>
               </td>
+              <td class="click-n">{{ a.clicks ?? 0 }}</td>
               <td class="muted">{{ a.expiresAt || '—' }}</td>
               <td class="muted">{{ a.updatedAt?.slice(0, 10) }}</td>
               <td>
@@ -1061,6 +1062,16 @@ if (key.value) loadList()
               <span class="rank-title">{{ s.q }}</span>
               <span class="rank-n">{{ s.n }} 次</span>
               <button class="mini" @click="seedFromSearch(s.q)">转素材</button>
+            </li>
+          </ol>
+
+          <h3 class="stats-title">链接点击 Top15（引流归因）</h3>
+          <div v-if="!stats.topLinks?.length" class="hint">暂无链接点击（文章发布后点链接会记录）</div>
+          <ol v-else class="rank-list">
+            <li v-for="(lk, i) in stats.topLinks" :key="lk.link_id">
+              <span class="rank-no">{{ i + 1 }}</span>
+              <a :href="lk.url" target="_blank" rel="noopener" class="rank-title">{{ lk.label || lk.domain || '链接' }} <span class="rank-n">{{ lk.domain || '' }}</span></a>
+              <span class="rank-n">{{ lk.n }} 次</span>
             </li>
           </ol>
 

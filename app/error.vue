@@ -2,6 +2,8 @@
 // 全局错误页：404 兜底（死链回收：返回首页/收藏），其他错误通用提示
 const props = defineProps<{ error: { statusCode?: number; statusMessage?: string } }>()
 const notFound = props.error?.statusCode === 404
+// SEO：错误页返回真实状态码（404/500），避免死链被当正常页收录；已下架文章走 gone(200+noindex) 不受影响
+setResponseStatus(notFound ? 404 : (props.error?.statusCode && props.error.statusCode >= 500 ? props.error.statusCode : 500))
 useHead({ title: notFound ? '页面不存在 - AI 文章站' : '出错了 - AI 文章站', meta: [{ name: 'robots', content: 'noindex, nofollow' }] })
 </script>
 

@@ -58,6 +58,14 @@ export default defineEventHandler(async (event) => {
     ORDER BY expires_at ASC LIMIT 20`)
   const expiringSoon = (expRes.results || []) as { id: string; title: string; expires_at: string }[]
 
+  // 链接级点击 Top15（引流文归因：哪条软文链接被点得多）
+  const linkRes = await db.run(sql`
+    SELECT c.link_id, count(*) AS n, MAX(l.label) AS label, MAX(c.domain) AS domain, MAX(l.url) AS url
+    FROM click_logs c LEFT JOIN links l ON l.id = c.link_id
+    WHERE c.link_id IS NOT NULL
+    GROUP BY c.link_id ORDER BY n DESC LIMIT 15`)
+  const topLinks = (linkRes.results || []) as { link_id: number; n: number; label: string | null; domain: string | null; url: string | null }[]
+
   // 待处理反馈数
   const [openReports] = await db
     .select({ n: sql<number>`count(*)` })
@@ -76,6 +84,7 @@ export default defineEventHandler(async (event) => {
     todayClicks: todayClicks?.n ?? 0,
     pendingSeeds: pendingSeeds?.n ?? 0,
     topClicks,
+    topLinks,
     todaySearches: todaySearches?.n ?? 0,
     topSearches,
     expiringSoon,

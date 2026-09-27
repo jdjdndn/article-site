@@ -20,6 +20,10 @@ const { data, status, error, refresh } = await useFetch(`/api/articles/${id.valu
   key: `article-${id.value}`,
   query: computed(() => ({ fp: fp.value })),
 })
+// 文章不存在/接口异常 → 交给全局错误页（真实 404 状态码，SEO）；已下架(gone)走 200+noindex 不受影响
+if (error.value) {
+  throw createError({ statusCode: error.value?.statusCode || 404, statusMessage: error.value?.statusMessage || '文章不存在' })
+}
 
 const favorited = ref(false)
 const favoriteCount = ref(0)
@@ -366,6 +370,14 @@ useHead(() => {
           <p v-else class="text-block">{{ block.text }}</p>
         </template>
 
+        <!-- 文末轻引导 -->
+        <div class="read-end">
+          <span>这篇对你有用吗？</span>
+          <button class="end-btn" :class="{ on: favorited }" @click="toggleFavorite">{{ favorited ? '★ 已收藏' : '☆ 收藏' }}</button>
+          <button class="end-btn" @click="copyLink">{{ shareDone ? '✓ 已复制' : '🔗 分享' }}</button>
+          <a class="end-btn link" href="#comments" rel="nofollow">💬 去评论区聊聊</a>
+        </div>
+
         <!-- 非 deal 模板：链接按钮放正文后 -->
         <div v-if="tmpl !== 'deal' && mainLinks.length" class="links">
           <a
@@ -679,6 +691,19 @@ useHead(() => {
 .video-title { font-size: 14px; font-weight: 600; color: var(--text); }
 .video-src { font-size: 12px; color: var(--text-muted); }
 .top-links { margin: 0 0 18px; }
+.read-end {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 14px 16px; margin: 6px 0 18px;
+  background: var(--primary-weak); border-radius: 12px;
+  color: var(--text); font-size: 14px;
+}
+.read-end .end-btn {
+  border: 1px solid var(--border); background: #fff; border-radius: 999px;
+  padding: 5px 14px; font-size: 13px; cursor: pointer; color: var(--text-muted);
+  text-decoration: none; transition: all .2s;
+}
+.read-end .end-btn:hover { border-color: var(--primary); color: var(--primary); }
+.read-end .end-btn.on { background: var(--primary); color: #fff; border-color: transparent; }
 
 .ad-block {
   background: #fffbeb;

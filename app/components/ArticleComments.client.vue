@@ -50,7 +50,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section v-if="server" class="comments card">
+  <section v-if="server" id="comments" class="comments card">
     <h2>评论</h2>
     <div ref="el" class="comments-mount">
       <p v-if="!server" class="hint">评论服务未配置</p>
@@ -59,7 +59,7 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.comments { margin-bottom: 22px; padding: 20px 24px; }
+.comments { margin-bottom: 22px; padding: 20px 24px; scroll-margin-top: 76px; }
 .comments h2 { font-size: 17px; margin-bottom: 12px; color: var(--text); }
 .hint { color: var(--text-muted); font-size: 13px; }
 /* Waline/Artalk/Twikoo 内部控件细节统一 */

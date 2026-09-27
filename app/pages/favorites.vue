@@ -41,6 +41,10 @@ async function shareFav(id: string) {
   } catch { /* 取消/失败忽略 */ }
 }
 
+const favCat = ref('all')
+const cats = computed(() => ['all', ...Array.from(new Set(list.value.map((f: any) => f.category || '文章')))] as string[])
+const filtered = computed(() => favCat.value === 'all' ? list.value : list.value.filter((f: any) => (f.category || '文章') === favCat.value))
+
 async function removeFav(id: string) {
   try {
     await $fetch(`/api/articles/${id}/favorite`, { method: 'POST', body: { fp: getFp(), action: 'remove' } })
@@ -65,7 +69,16 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
     </div>
 
     <div v-else class="fav-list">
-      <div v-for="f in list" :key="f.id" class="fav-item">
+      <div class="fav-filter">
+        <button
+          v-for="c in cats"
+          :key="c"
+          class="mini"
+          :class="{ on: favCat === c }"
+          @click="favCat = c"
+        >{{ c === 'all' ? '全部' : c }}</button>
+      </div>
+      <div v-for="f in filtered" :key="f.id" class="fav-item">
         <div class="fav-head">
           <span class="cat">{{ f.category || '文章' }}</span>
           <span v-if="f.expiresAt" class="exp">⏰ {{ f.expiresAt }}</span>
@@ -88,6 +101,8 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
 .empty { text-align: center; color: var(--text-muted); padding: 48px 0; font-size: 14px; }
 .link { color: var(--primary); text-decoration: none; }
 .fav-list { display: flex; flex-direction: column; gap: 12px; }
+.fav-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+.fav-filter .mini { padding: 4px 14px; }
 .fav-item {
   display: block;
   padding: 16px 18px;

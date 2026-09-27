@@ -31,6 +31,7 @@ export default defineEventHandler(async (event) => {
       needsReview: articles.needsReview,
       expiresAt: articles.expiresAt,
       updatedAt: articles.updatedAt,
+      clicks: sql<number>`COALESCE((SELECT count(*) FROM click_logs c WHERE c.article_id = ${articles.id}), 0)`,
     })
     .from(articles)
     .where(and(...conds))
