@@ -44,19 +44,48 @@ async function toggleFavorite() {
 }
 
 function isAd(block: any) { return block?.type === 'ad' }
+const isH2 = (b: any) => b?.type === 'h2'
+const isList = (b: any) => b?.type === 'list'
+const isPrice = (b: any) => b?.type === 'price'
+const isQuote = (b: any) => b?.type === 'quote'
+const isImage = (b: any) => b?.type === 'image'
+// 文章模板：default / deal（商品带货）/ guide（攻略）/ faq（问答）
+const tmpl = computed(() => {
+  const t = data.value?.article?.template
+  return ['deal', 'guide', 'faq'].includes(t) ? t : 'default'
+})
 
-// GEO：JSON-LD（Article + FAQPage）
+// GEO：JSON-LD（Article 全字段 + BreadcrumbList + FAQPage）
 useHead(() => {
   const a = data.value?.article
   if (!a) return {}
+  const url = `https://www.wcbblll.cc/article/${a.id}`
   const ld: any[] = [{
     '@context': 'https://schema.org',
     '@type': 'Article',
     headline: a.title,
     description: a.summary,
+    url,
+    inLanguage: 'zh-CN',
+    mainEntityOfPage: { '@type': 'WebPage', '@id': url },
     datePublished: a.createdAt,
     dateModified: a.updatedAt,
-    author: { '@type': 'Organization', name: 'AI 文章站' },
+    articleSection: a.category || '文章',
+    keywords: Array.isArray(a.tags) ? a.tags.join(',') : '',
+    author: { '@type': 'Organization', name: 'AI 文章站', url: 'https://www.wcbblll.cc' },
+    publisher: {
+      '@type': 'Organization',
+      name: 'AI 文章站',
+      url: 'https://www.wcbblll.cc',
+    },
+  }, {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: '首页', item: 'https://www.wcbblll.cc' },
+      { '@type': 'ListItem', position: 2, name: a.category || '文章', item: `https://www.wcbblll.cc/?cat=${encodeURIComponent(a.category || '')}` },
+      { '@type': 'ListItem', position: 3, name: a.title, item: url },
+    ],
   }]
   if (a.faq?.length) {
     ld.push({
@@ -71,7 +100,14 @@ useHead(() => {
   }
   return {
     title: a.title,
-    meta: [{ name: 'description', content: a.summary }],
+    meta: [
+      { name: 'description', content: a.summary },
+      { property: 'og:type', content: 'article' },
+      { property: 'og:url', content: url },
+      { property: 'og:title', content: a.title },
+      { property: 'og:description', content: a.summary },
+      { property: 'og:site_name', content: 'AI 文章站' },
+    ],
     script: [{ type: 'application/ld+json', innerHTML: JSON.stringify(ld) }],
   }
 })
@@ -105,38 +141,71 @@ useHead(() => {
         >{{ favorited ? '★ 已收藏' : '☆ 收藏' }}（{{ favoriteCount }}）</button>
       </div>
 
-      <!-- 正文（结构化段落：text / ad 软文） -->
-      <article class="content card">
+      <!-- 正文（结构化块：text/h2/list/price/quote/ad/image，按模板布局） -->
+      <article class="content card" :class="'tmpl-' + tmpl">
+        <!-- deal 模板：购买入口前置 -->
+        <div v-if="tmpl === 'deal' && data.article.links?.length" class="links top-links">
+          <a
+            v-for="(l, i) in data.article.links"
+            :key="i"
+            :href="l.url"
+            target="_blank"
+            rel="noopener nofollow"
+            class="link-btn"
+          >{{ l.label }}</a>
+        </div>
+        <!-- faq 模板：FAQ 前置 -->
+        <section v-if="tmpl === 'faq' && data.article.faq?.length" class="faq">
+          <h2>常见问题</h2>
+          <details v-for="(f, i) in data.article.faq" :key="i">
+            <summary>{{ f.q }}</summary>
+            <p>{{ f.a }}</p>
+          </details>
+        </section>
+
         <template v-for="(block, i) in data.article.content" :key="i">
           <div v-if="isAd(block)" class="ad-block">
             <span class="ad-label">{{ block.label || '广告' }}</span>
             <p>{{ block.text }}</p>
             <a v-if="block.link" :href="block.link" target="_blank" rel="noopener nofollow" class="ad-link">去看看 →</a>
           </div>
+          <h2 v-else-if="isH2(block)" class="block-h2">{{ block.text }}</h2>
+          <div v-else-if="isList(block)" class="block-list">
+            <p v-for="(item, j) in block.items" :key="j" class="list-item">{{ item }}</p>
+          </div>
+          <div v-else-if="isPrice(block)" class="block-price">
+            <span class="price">¥{{ block.price }}</span>
+            <span v-if="block.original" class="original">¥{{ block.original }}</span>
+            <span v-if="block.spec" class="spec">{{ block.spec }}</span>
+          </div>
+          <div v-else-if="isQuote(block)" class="block-quote" :class="block.tone === 'warn' ? 'warn' : 'info'">{{ block.text }}</div>
+          <figure v-else-if="isImage(block)" class="block-image">
+            <img :src="block.url" :alt="block.alt || data.article.title" loading="lazy" />
+          </figure>
           <p v-else class="text-block">{{ block.text }}</p>
         </template>
+
+        <!-- 非 deal 模板：链接按钮放正文后 -->
+        <div v-if="tmpl !== 'deal' && data.article.links?.length" class="links">
+          <a
+            v-for="(l, i) in data.article.links"
+            :key="i"
+            :href="l.url"
+            target="_blank"
+            rel="noopener nofollow"
+            class="link-btn"
+          >{{ l.label }}</a>
+        </div>
       </article>
 
-      <!-- FAQ（GEO：问答对） -->
-      <section v-if="data.article.faq?.length" class="faq card">
+      <!-- FAQ（非 faq 模板：放正文后；GEO 问答对） -->
+      <section v-if="tmpl !== 'faq' && data.article.faq?.length" class="faq card">
         <h2>常见问题</h2>
         <details v-for="(f, i) in data.article.faq" :key="i">
           <summary>{{ f.q }}</summary>
           <p>{{ f.a }}</p>
         </details>
       </section>
-
-      <!-- 链接按钮 -->
-      <div v-if="data.article.links?.length" class="links">
-        <a
-          v-for="(l, i) in data.article.links"
-          :key="i"
-          :href="l.url"
-          target="_blank"
-          rel="noopener nofollow"
-          class="link-btn"
-        >{{ l.label }}</a>
-      </div>
 
       <!-- 相关文章（6.2 判定） -->
       <section v-if="data.related?.length" class="related card">
@@ -180,6 +249,20 @@ useHead(() => {
 .fav-btn.on { background: #fff7e6; border-color: #faad14; color: #d48806; }
 .content { margin-bottom: 20px; }
 .text-block { margin-bottom: 12px; }
+.block-h2 { font-size: 18px; margin: 22px 0 10px; padding-top: 6px; border-bottom: 1px solid #f0f0f0; padding-bottom: 8px; }
+.block-list { margin: 10px 0; }
+.list-item { padding: 5px 0 5px 18px; position: relative; color: #444; }
+.list-item::before { content: '•'; position: absolute; left: 2px; color: #1677ff; }
+.block-price { display: flex; align-items: baseline; gap: 10px; background: #fff7e6; border: 1px solid #ffd591; border-radius: 8px; padding: 12px 16px; margin: 14px 0; }
+.block-price .price { font-size: 26px; font-weight: 700; color: #fa541c; }
+.block-price .original { color: #bbb; text-decoration: line-through; font-size: 14px; }
+.block-price .spec { color: #666; font-size: 13px; }
+.block-quote { border-radius: 8px; padding: 12px 16px; margin: 14px 0; font-size: 14px; line-height: 1.7; }
+.block-quote.warn { background: #fff1f0; border: 1px solid #ffccc7; color: #cf1322; }
+.block-quote.info { background: #e6f4ff; border: 1px solid #91caff; color: #0958d9; }
+.block-image { margin: 14px 0; }
+.block-image img { max-width: 100%; border-radius: 8px; display: block; }
+.top-links { margin: 0 0 16px; }
 .ad-block { background: #fffbe6; border: 1px dashed #faad14; border-radius: 8px; padding: 12px; margin: 12px 0; }
 .ad-label { display: inline-block; background: #faad14; color: #fff; font-size: 11px; padding: 1px 8px; border-radius: 4px; margin-bottom: 6px; }
 .ad-link { display: inline-block; margin-top: 6px; font-weight: 600; }

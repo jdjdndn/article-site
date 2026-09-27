@@ -6,10 +6,13 @@ export const articles = sqliteTable('articles', {
   id: text('id').primaryKey(),                    // 如 a-20260927-001
   title: text('title').notNull(),
   summary: text('summary').notNull().default(''),
-  content: text('content').notNull(),            // JSON: [{type:'text'|'ad', text, link?, label?}]
+  content: text('content').notNull(),            // JSON 块数组，块类型见前台渲染：text/h2/list/price/quote/ad/image
+  template: text('template').notNull().default('default'), // default / deal（商品带货）/ guide（攻略）/ faq（问答）
   category: text('category').notNull().default(''),
   tags: text('tags').notNull().default('[]'),    // JSON: ["牛奶","中秋"]
   status: text('status').notNull().default('draft'), // draft / published / deleted / expired
+  needsReview: integer('needs_review').notNull().default(0), // 1=内容安全命中待人工审核（status 为 draft）
+  publishAt: text('publish_at'),               // 定时发布时间（ISO），未到则保持 draft，到点 cron 自动发布
   expiresAt: text('expires_at'),                 // ISO 日期，到期自动置 expired
   links: text('links').notNull().default('[]'),  // JSON: [{label, url}]
   friendLinks: text('friend_links').notNull().default('[]'), // JSON: [{name, url}]

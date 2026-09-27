@@ -4,18 +4,20 @@ import { requireAdmin } from '../../../utils/auth'
 import { useDb } from '../../../utils/db'
 import { articles } from '../../../db/schema'
 
-// GET /api/admin/articles?key=xxx&status=&cursor=&limit=
+// GET /api/admin/articles?key=xxx&status=&needsReview=1&cursor=&limit=
 // 后台文章列表：全部状态（不含已删，回收站走 /api/admin/trash），游标分页
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const q = getQuery(event)
   const status = typeof q.status === 'string' && q.status ? q.status : ''
+  const needsReview = q.needsReview === '1'
   const cursor = typeof q.cursor === 'string' ? q.cursor : ''
   const limit = Math.min(Number(q.limit) || 20, 100)
   const db = useDb()
 
   const conds = [ne(articles.status, 'deleted')]
   if (status) conds.push(eq(articles.status, status))
+  if (needsReview) conds.push(eq(articles.needsReview, 1))
   if (cursor) conds.push(lt(articles.updatedAt, cursor))
 
   const list = await db
@@ -24,6 +26,7 @@ export default defineEventHandler(async (event) => {
       title: articles.title,
       category: articles.category,
       status: articles.status,
+      needsReview: articles.needsReview,
       expiresAt: articles.expiresAt,
       updatedAt: articles.updatedAt,
     })

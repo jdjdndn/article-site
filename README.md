@@ -1,115 +1,261 @@
 # AI 文章站（article-site）
 
-基于 Nuxt 3/4 + Cloudflare D1 的 AI 文章站骨架（对应 `E:\code\github.io\PLAN-ai-article-pipeline.md` v14 计划）。
+基于 **Nuxt 4 + Nitro + Cloudflare D1/Workers** 的 AI 文章站，已部署上线：**https://www.wcbblll.cc**
 
-## 技术栈（全开源）
+免费 AI 录入（DeepSeek/豆包/Kimi 等网页版）→ 去 AI 味 + 结构化 → 后台预览确认 → 入库 → 前台展示（SEO/GEO 优化）。
 
-- **前端**：Nuxt 3/4（SSG/SEO/GEO 内置）、Vue 3
-- **后端**：Nitro（Hono 同源）server API，同域 `/api/*`
-- **数据库**：Cloudflare D1 + Drizzle ORM（迁移管理）
-- **校验**：zod（后续接入）
-- **评论**：开源系统 Artalk / Waline / Twikoo（后续接入）
+---
 
-## 目录结构
+## 一、文章模板与内容结构（怎么用）
 
+文章由 **模板（版式）+ 内容块（JSON 数组）+ 元数据** 组成。
+
+### 1. 模板（template 字段，后台表单可选）
+
+| 模板 | 值 | 适用 | 布局差异 |
+|---|---|---|---|
+| 通用 | `default` | 普通文章 | 链接按钮在正文后 |
+| 好物带货 | `deal` | 商品/优惠文 | **购买按钮置顶**，价格卡/FAQ 在后 |
+| 攻略 | `guide` | 教程/步骤文 | 小标题分段流式 |
+| 问答 | `faq` | 答疑文 | **FAQ 折叠置顶** |
+
+### 2. 内容块（content 字段的 JSON 数组，type 决定渲染样式）
+
+| type | 渲染效果 | 字段 |
+|---|---|---|
+| `text` | 普通段落 | text |
+| `h2` | 小标题（下划线分隔） | text |
+| `list` | 要点列表（项目符号） | items: string[] |
+| `price` | 价格卡：大号红价 + 划线原价 + 规格 | price, original?, spec? |
+| `quote` | 提示框：warn 红框（时效提醒）/ info 蓝框 | text, tone: "warn"\|"info" |
+| `ad` | 软文块（黄底虚线框） | label, text, link? |
+| `image` | 图片（懒加载） | url, alt? |
+
+### 3. 完整示例（deal 模板带货文）
+
+```json
+{
+  "template": "deal",
+  "title": "蒙牛特仑苏低脂牛奶 250ml×16盒 券后44.9元",
+  "summary": "特仑苏限定牧场，3.6g乳蛋白，120mg高钙，健身减脂也能喝",
+  "category": "好物",
+  "status": "published",
+  "expiresAt": "2026-12-31",
+  "content": [
+    { "type": "price", "price": "44.9", "original": "69.9", "spec": "250ml×16盒 领券直降" },
+    { "type": "text", "text": "特仑苏限定牧场，3.6g乳蛋白，120mg高钙。" },
+    { "type": "list", "items": ["低脂配方健身也能喝", "礼盒装适合中秋送礼"] },
+    { "type": "quote", "tone": "warn", "text": "价格与库存可能随时变化，以页面显示为准" },
+    { "type": "ad", "label": "推荐", "text": "这款是爆款，买的人很多", "link": "https://u.jd.com/..." }
+  ],
+  "links": [
+    { "label": "领券", "url": "https://u.jd.com/..." },
+    { "label": "抢购", "url": "https://u.jd.com/..." }
+  ],
+  "tags": ["牛奶", "特仑苏", "中秋送礼"],
+  "faq": [
+    { "q": "是低脂的吗？", "a": "是，健身减脂也能喝。" },
+    { "q": "券后多少钱？", "a": "领券直降后 44.9 元。" }
+  ],
+  "relatedIds": [],
+  "friendLinks": []
+}
 ```
-article-site/
-├── app/                     # Nuxt 前端（Nuxt 4 结构）
-│   ├── app.vue              # 布局（导航/页脚/友链）
-│   ├── assets/css/main.css  # 全局样式
-│   └── pages/               # 页面
-│       ├── index.vue        # 首页（分类 tab + 列表 + 分页）
-│       ├── article/[id].vue # 详情（正文/ad软文/链接/相关/友链）
-│       ├── admin.vue        # 后台（?key= 校验 + 新建表单占位）
-│       └── about.vue        # 关于
-├── server/                  # Nitro 后端
-│   ├── api/articles/        # 列表（游标分页）、详情（含 related）
-│   ├── db/schema.ts         # Drizzle schema（articles/favorites）
-│   └── utils/db.ts          # D1 连接（process.env.DB）
-├── drizzle/                 # Drizzle 迁移文件
-├── drizzle.config.ts        # Drizzle 配置
-├── nuxt.config.ts           # cloudflare_pages preset + runtimeConfig
-└── wrangler.toml            # Cloudflare 配置（D1 绑定）
+
+其他字段说明：
+
+| 字段 | 说明 |
+|---|---|
+| `expiresAt` | 过期日期（`YYYY-MM-DD`），到期前台自动显示"已过期"并降权（cron 每分钟顺带标记 expired） |
+| `status` | `draft` 草稿 / `published` 发布（软删后进回收站） |
+| `publishAt` | **定时发布时间**（ISO 格式，后台用"定时发布"输入框）：填了未来时间 → 自动进草稿，到点 cron 每分钟自动转发布；不填则按状态选择立即生效 |
+| `relatedIds` | 相关文章 id 数组（同分类自动推荐，也可手动指定） |
+| `friendLinks` | 文章级友链；不填时前台显示默认友链 |
+
+---
+
+## 二、后台录入流程（日常操作）
+
+后台地址：`https://www.wcbblll.cc/admin?key=你的管理密钥`
+
+### 手动录入
+
+1. 新建文章 → 填标题/摘要/分类/模板/过期时间
+2. 正文等 JSON 字段可粘贴原始数据（京东/淘宝/拼多多文案都行）
+3. **🧹 格式化全部 JSON**：一键排版；非法 JSON 会红框标出
+4. **👁 预览效果**：不落库预览（与前台渲染一致），满意再点保存
+5. 保存后回列表，点标题可看线上效果
+
+> **发布规则**（手动/自动发文章一致）：状态默认「发布」——**不填定时发布 → 保存立即上线**；填了未来时间 → 自动进草稿，到点 cron 发布；想暂不上线就选「草稿」。
+
+### AI 完善录入（推荐，处理"好有坏"的原始数据）
+
+前置：本机已启动免费 AI 网关（见第三节）。
+
+1. 新建文章 → **先选好模板**（deal/guide/faq/default）→ 把原始素材粘进表单（标题/正文随便填，AI 会重写）
+2. 点 **✨ AI 完善** → 选模型（deepseek-chat 等）→ 开始完善
+3. AI 自动完成：**去 AI 味**（口语化、删套话）+ 信息完善（突出价格/规格/卖点）+ **按所选模板自动生成结构块**：
+
+   | 模板 | AI 自动产出的块 |
+   |---|---|
+   | deal 好物带货 | price 价格卡 + list 卖点 + quote warn 时效提示 + 2~3 段 text + ad 软文 |
+   | guide 攻略 | ≥2 个 h2 小标题 + text 段落 + list 要点 |
+   | faq 问答 | text 段落 + ≥3 条 FAQ |
+   | default 通用 | text 为主，可含 h2/list/ad |
+
+4. 预览核对（价格/链接/时效提示是否正确）→ 保存
+
+### 批量录入（AI 批量流水线）
+
+后台列表页点 **「⿇ 批量录入」**，一次贴入多条原始文案批量成文：
+
+1. **粘贴**：多条京东/淘宝/拼多多文案或「——标题——」分组，素材之间用空行分隔（支持直接粘贴长文本，自动切分）
+2. **① 切分素材**：按空行 / 分隔线切分并过滤过短片段，逐条卡片显示
+3. **② AI 批量生成**：逐条调用本地网关，按所选模板（deal/guide/faq/default）去 AI 味 + 结构化（可单条重试）
+4. **③ 批量入库**：勾选已完成条目 → `POST /api/admin/articles/batch` 一次提交（D1 batch 原子写入）
+
+> 批量面板可指定模板/分类/模型/**定时发布**（可选，datetime-local：填了未来时间自动进草稿，到点 cron 发布，与手动单篇定时同一机制，互不冲突）；入库后回列表可逐条编辑。AI 生成结果命中内容安全规则会自动转草稿（见下）。
+
+### 内容安全审核（先审后发）
+
+发布（手动/批量/定时）时对 **标题+摘要+正文** 做违规词扫描（`server/utils/content-safety.ts`，覆盖色情/赌博/毒品/诈骗引流/暴恐武器/违禁交易/未成年相关等通用类别）：
+
+- **命中即强制转草稿**（`draft`）+ 打 **待审标记**（`needs_review=1`），前台不可见
+- 后台「**待审（N）**」tab 集中列出命中文章（列表行有 🟡 待审徽标），操作：
+  - **通过并发布**：清除待审标记并立即 `published`
+  - **通过留草稿**：清除标记、保持草稿，方便先改再发
+  - **编辑**：跳转表单修改后保存（保存仍会重新扫描，再命中会再次待审）
+  - **删除**：软删进回收站
+- 词库为纯 JS 内置，无外部依赖，增删改 `content-safety.ts` 里的 `RULES` 即可；词库仅作合规兜底，不替代人工判断
+
+### 定时发布
+
+后台表单勾选"定时发布"（datetime-local）→ 保存时自动转 ISO 存 `publish_at`：
+
+- 填了**未来时间** → 状态强制 `draft`（列表显示 ⏱ 徽标），前台不可见
+- **到点后** Cloudflare Cron Trigger（每分钟）触发 `scheduled` 事件 → `server/plugins/publish-on-schedule.ts` 自动转 `published`，前台可见
+- 已发布的文章 `expires_at` 到期后同样由该 cron 自动标记 `expired`
+
+> 实现说明：没用 Nitro 的 `scheduledTasks`（在 cloudflare_module preset 下未生效，任务不会被打包），改为插件挂 `cloudflare:scheduled` hook，逻辑等价且幂等。cron 配置在 `wrangler.jsonc` 的 `triggers.crons`。
+
+### 管理
+
+- 列表可编辑/软删；回收站可恢复/永久删除（永久删除不可恢复）
+- 无 key 访问后台与 API 一律 401
+
+---
+
+## 三、免费 AI 网关（token-free-gateway）
+
+把 DeepSeek/豆包/Kimi/ChatGPT/Claude 等 13 家**网页版** AI 包装成 OpenAI 兼容 API，**完全免费**（凭据存本地，浏览器登录态经 CDP 转发，绕反爬）。
+
+- 程序：`E:\code\token-free-gateway\token-free-gateway.exe`（**源码本地构建版**；npm/GitHub 发布版有打包缺陷）
+- 详细说明：`E:\code\token-free-gateway\README.md`
+
+```powershell
+# 1) 启动网关（监听 http://localhost:3456）
+E:\code\token-free-gateway\token-free-gateway.exe start
+
+# 2) 授权模型（一次性；DeepSeek 保持聊天页开着）
+E:\code\token-free-gateway\token-free-gateway.exe webauth
+
+# 3) 验证
+curl http://localhost:3456/v1/models
 ```
 
-## 本地开发
+后台「✨ AI 完善」会自动连接本网关；提示"未连接"就是网关没启动。
+
+---
+
+## 四、本地开发
 
 ```bash
 npm install
-npm run dev        # http://localhost:3000
+# 本地调试需先构建（wrangler dev 读 dist/_worker.js + 本地 D1）
+npm run build
+npx wrangler dev          # http://localhost:8787（读取 .dev.vars 里的 NUXT_MANAGE_KEY）
 ```
 
-> 注意：本地 dev 时 API 需要 D1 binding。没有 binding 时页面可看、`/api/*` 返回 500（预期）。
-> 本地带 D1 预览：`npx wrangler pages dev dist --d1 DB`（先 build）。
+- `.dev.vars`：`NUXT_MANAGE_KEY=xxx`（本地调试用，已 gitignore）
+- 本地 D1 与远程用同一条命令区分：`wrangler d1 execute article-db --local / --remote`
 
-## 数据库（D1 + Drizzle）
+## 五、数据库（Cloudflare D1）
+
+- database_id：`9051caef-e987-4a47-ae8c-2f91496b1a82`（在 `wrangler.jsonc`）
+- 表：`articles`（文章，含 template / needs_review / publish_at 列）、`favorites`（收藏，设备指纹）
+- 改 schema：`npx drizzle-kit generate` 生成迁移 → `wrangler d1 execute article-db --remote --file=./drizzle/xxx.sql` 应用
+- 已有过的手动迁移：`ALTER TABLE articles ADD COLUMN template text NOT NULL DEFAULT 'default'`、`ALTER TABLE articles ADD COLUMN needs_review integer NOT NULL DEFAULT 0`（远程+本地都要执行；`drizzle/0001_add-needs-review.sql` 是 drizzle 生成的完整 diff，含已手动加过的列，回放时跳过重复列）
+
+## 六、部署（Cloudflare Workers）
 
 ```bash
-npx wrangler login
-npx wrangler d1 create article-db      # 把输出的 database_id 填到 wrangler.toml
-
-# 改 schema 后生成迁移
-npx drizzle-kit generate
-# 应用迁移（远程）
-npx wrangler d1 migrations apply article-db --remote
-# 应用迁移（本地预览）
-npx wrangler d1 migrations apply article-db --local
+npm run build          # 产物 dist/（postbuild 追加 .assetsignore 忽略 source map）
+npx wrangler deploy    # 部署到 www.wcbblll.cc（wrangler.jsonc 配置 D1 + assets）
 ```
 
-## 部署（Cloudflare Pages）
+密钥（Cloudflare 控制台 → Worker → Settings → Variables and Secrets）：
 
-```bash
-npm run build        # 输出 dist/（worker + 静态）
-npx wrangler pages deploy dist --project-name article-site
+| 变量 | 说明 |
+|---|---|
+| `NUXT_MANAGE_KEY` | 管理密钥（Nuxt runtimeConfig 读取规则是 `NUXT_` 前缀！设 `MANAGE_KEY` 无效） |
+| 本地副本 | `E:\code\article-site\.env.manage-key`（勿外传） |
+
+> 设置/更新 secret 后**必须重新 `wrangler deploy`** 才生效。
+
+## 七、API 一览
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/articles` | 列表（游标分页，仅 published 未过期） |
+| GET | `/api/articles/:id` | 详情（含 related/favoriteCount） |
+| GET | `/api/articles/search?q=` | FTS5 全文搜索（中文子串） |
+| POST | `/api/articles/:id/favorite` | 收藏/取消（body: fp + action） |
+| GET | `/api/favorites?fp=` | 收藏列表 |
+| POST | `/api/admin/articles?key=` | 新增（鉴权） |
+| POST | `/api/admin/articles/batch?key=` | 批量新增（D1 batch，含内容安全拦截 + 定时发布） |
+| GET | `/api/admin/articles?key=` | 管理列表（`&status=` 按状态过滤；`&needsReview=1` 只看待审） |
+| PUT | `/api/admin/articles/:id?key=` | 修改（整篇覆盖） |
+| PUT | `/api/admin/articles/:id/approve?key=` | 人工审核通过（body: `{"status":"published"|"draft"}`，默认保持原状态，仅清待审标记） |
+| DELETE | `/api/admin/articles/:id?key=` | 软删（进回收站） |
+| PUT | `/api/admin/articles/:id/restore?key=` | 恢复 |
+| DELETE | `/api/admin/articles/:id/permanent?key=` | 永久删除 |
+| GET | `/api/admin/trash?key=` | 回收站列表 |
+
+## 八、SEO / GEO
+
+- **JSON-LD 结构化数据**（喂给搜索引擎和 AI 爬虫，AI 问答可直接引用）：
+  - 首页：`WebSite`（含 `alternateName` / `inLanguage` / `SearchAction` → `?q={search_term_string}`）+ 列表加载后注入 `ItemList`
+  - 详情页：`Article` 全字段（headline / description / url / mainEntityOfPage / articleSection / keywords / author / publisher）+ `BreadcrumbList`（首页→分类→文章）+ `FAQPage`（有 FAQ 时）
+- **og 标签**：首页 website、详情页 article（og:title / description / url / site_name）
+- **robots.txt**：放行 GPTBot / ClaudeBot / PerplexityBot / Bytespider / CCBot 等 AI 爬虫
+- **sitemap.xml**：基础版（文章增量可 cron 生成）
+- 文章内容建议：FAQ 问答对（GEO 增强）、时效性用 `quote` warn 提示、相关文章互链、文章级友链
+
+## 九、已知坑（踩过）
+
+- **D1 的 FTS5 不支持 `'delete'` 命令语法**：触发器必须用 `DELETE FROM articles_fts WHERE rowid=...`，否则所有 UPDATE/DELETE 报 SQLITE_ERROR 7500（`server/utils/db.ts` 已按此实现）
+- **Nuxt runtimeConfig secret 前缀**：服务端读 `NUXT_MANAGE_KEY`，不是 `MANAGE_KEY`
+- **PowerShell 调 API 中文乱码**：Invoke-RestMethod 字符串 Body 会丢中文，用 `[Text.Encoding]::UTF8.GetBytes()` + WebRequest
+- **wrangler tail 在部分网络 ETIMEDOUT**：本地 `wrangler dev` 复现更稳
+
+## 十、目录结构
+
 ```
-
-或 **GitHub 自动部署**（推荐）：
-1. push 到 GitHub 仓库
-2. Cloudflare 控制台 → Workers & Pages → 创建 → Pages → 连接 Git 仓库
-3. 构建命令：`npm run build`；输出目录：`dist`
-4. 自定义域绑定（如 article.wcbblll.cc）
-
-**环境变量**（Pages → Settings → 环境变量）：
-- `MANAGE_KEY`：管理后台密钥（/admin?key=xxx）
-- D1 绑定：Settings → Functions → 绑定 `article-db`
-
-## 评论（开源系统）
-
-前端已接入通用组件 `app/components/ArticleComments.client.vue`，支持三种开源评论系统（按需动态加载，只打包用到的）：
-
-| 系统 | 部署 | 环境变量 |
-|------|------|---------|
-| **Artalk**（默认） | 自托管 Go 单文件（artalk 官网一键部署 / docker） | `NUXT_PUBLIC_COMMENT_PROVIDER=artalk` + `NUXT_PUBLIC_COMMENT_SERVER=https://评论域名` |
-| **Waline** | Vercel / Cloudflare Workers | `NUXT_PUBLIC_COMMENT_PROVIDER=waline` + `NUXT_PUBLIC_COMMENT_SERVER=https://...` |
-| **Twikoo** | 云函数 / 自托管 | `NUXT_PUBLIC_COMMENT_PROVIDER=twikoo` + `NUXT_PUBLIC_COMMENT_SERVER=envId` |
-
-- 评论数据存评论系统自身数据库，**不占 D1**
-- 先审后发 / 反垃圾（Akismet）/ 敏感词 / 举报删除由评论系统自带（PLAN 6.3）
-
-## 当前状态
-
-- ✅ 项目初始化、Nuxt 4 构建通过（cloudflare_pages preset，dist/ + .assetsignore）
-- ✅ Drizzle schema + 迁移（articles / favorites 两表）
-- ✅ 首页/详情/后台/关于四页面；首页搜索框（?q= URL 同步）
-- ✅ 前台 API：列表（游标分页）、详情（含 related 判定）、**FTS5 全文搜索**（trigram，长词 MATCH / 短词 LIKE 兜底）、**收藏**（设备指纹）
-- ✅ 管理 API：新增/列表/详情/修改/**软删**/回收站/**恢复**/**真删**（全部鉴权，无 key 401）
-- ✅ GEO：详情页 JSON-LD（Article + FAQPage）、首页 WebSite JSON-LD、robots.txt 放行 AI 爬虫（GPTBot/ClaudeBot/PerplexityBot/Bytespider/CCBot）、sitemap.xml 基础版
-- ✅ **评论接入**：开源系统通用组件（Artalk/Waline/Twikoo，环境变量切换，动态按需加载）
-- ⏳ 待做：评论系统后端部署、管理后台美化、AI 生成管线（开源网关+去味）、文章 sitemap 增量生成（cron）
-
-## 搜索（FTS5）
-
-- 全文索引 `articles_fts`（trigram 分词，中文子串匹配）在首次调用搜索时**自动创建**（ensureFts，含触发器同步 + 存量回填，幂等）
-- 关键词 ≥3 字走 `MATCH`（bm25 排序）；<3 字（如"牛奶"）降级 LIKE 兜底
-- 搜索仅命中 published 且未过期文章（排除 deleted/expired）
-
-## 收藏（设备指纹免注册）
-
-- `POST /api/articles/:id/favorite`（body: fp + action add/remove，唯一约束幂等）
-- `GET /api/favorites?fp=xxx` 收藏列表
-- 详情页返回 `favoriteCount` / `favorited`（?fp= 可选）
-
-## 友链
-
-- jdjdndn.github.io（主站）
-- wcbblll.cc（导航站）
+article-site/
+├── app/
+│   ├── app.vue                  # 布局（导航/页脚/友链）
+│   ├── assets/css/main.css      # 全局样式
+│   └── pages/
+│       ├── index.vue            # 首页（分类 tab + 搜索 + 分页）
+│       ├── article/[id].vue     # 详情（模板布局 + 块渲染 + FAQ/评论/友链）
+│       ├── admin.vue            # 后台（格式化/预览/AI 完善/待审/回收站/批量定时）
+│       └── about.vue
+├── server/
+│   ├── api/                     # Nitro 接口（articles / admin / favorites）
+│   ├── db/schema.ts             # Drizzle schema
+│   └── utils/db.ts              # D1 连接 + FTS5 ensureFts（触发器同步）
+├── drizzle/                     # 迁移文件
+├── wrangler.jsonc               # Cloudflare 配置（D1 + assets + custom domain）
+├── scripts/postbuild.mjs        # 构建后追加 .assetsignore
+└── nuxt.config.ts
+```

@@ -18,7 +18,8 @@ onMounted(async () => {
       init({
         el: el.value,
         serverURL: server,
-        path: props.articleId,
+        // 后端按完整页面 URL（url 列）匹配评论；path 须与 POST 时提交的 url 一致
+        path: window.location.href,
         lang: 'zh-CN',
         dark: 'auto',
       })

@@ -3,9 +3,11 @@ export default defineNuxtConfig({
   compatibilityDate: '2026-09-27',
   devtools: { enabled: true },
 
-  // Cloudflare Pages 部署 preset（构建输出 .output/public）
+  // Cloudflare Workers（module worker，原生支持 scheduled 事件 → cron 定时发布）
   nitro: {
-    preset: 'cloudflare_pages'
+    preset: 'cloudflare_module',
+    // 定时发布由 server/plugins/publish-on-schedule.ts 挂 cloudflare:scheduled hook 实现
+    // （Nitro scheduledTasks 在 cloudflare_module preset 下未生效，已弃用）
   },
 
   app: {
@@ -28,8 +30,8 @@ export default defineNuxtConfig({
       // 页面端校验占位；真实鉴权在 server 端（server/api/admin/*）
       manageKey: '',
       // 开源评论系统：provider = artalk | waline | twikoo；server 为对应后端地址
-      commentProvider: 'artalk',
-      commentServer: ''
+      commentProvider: 'waline',
+      commentServer: 'https://comments.wcbblll.cc'
     }
   }
 })

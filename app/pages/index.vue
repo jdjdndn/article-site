@@ -5,17 +5,38 @@ const route = useRoute()
 const router = useRouter()
 
 // GEO：站点级 WebSite JSON-LD
-useHead({
+// GEO：站点级 WebSite + SearchAction（SiteLinksSearchBox，喂给搜索引擎和 AI 爬虫）
+useHead(() => ({
+  title: 'AI 文章站 - 优惠攻略、好物推荐、副业指南',
+  meta: [
+    { name: 'description', content: 'AI 文章站：实时优惠攻略、好物推荐、省钱技巧与副业指南，每日更新。' },
+    { property: 'og:type', content: 'website' },
+    { property: 'og:site_name', content: 'AI 文章站' },
+    { property: 'og:url', content: 'https://www.wcbblll.cc' },
+    { property: 'og:title', content: 'AI 文章站' },
+    { property: 'og:description', content: '优惠攻略、好物推荐、副业指南，每日更新。' },
+  ],
   script: [{
     type: 'application/ld+json',
     innerHTML: JSON.stringify([{
       '@context': 'https://schema.org',
       '@type': 'WebSite',
       name: 'AI 文章站',
-      url: 'https://article.wcbblll.cc',
+      alternateName: 'wcbblll.cc',
+      url: 'https://www.wcbblll.cc',
+      inLanguage: 'zh-CN',
+      description: 'AI 文章站：优惠攻略、好物推荐、副业指南，每日更新。',
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: {
+          '@type': 'EntryPoint',
+          urlTemplate: 'https://www.wcbblll.cc/?q={search_term_string}',
+        },
+        'query-input': 'required name=search_term_string',
+      },
     }]),
   }],
-})
+}))
 
 // 分类 tab（后续可从 API 动态生成）
 const categories = ref(['全部', '优惠', '攻略', '好物', '副业'])
@@ -34,6 +55,27 @@ const { data, status, refresh } = await useFetch(isSearching.value ? '/api/artic
     return { category: active.value === '全部' ? '' : active.value, cursor: cursor.value, limit: perPage }
   }),
   key: computed(() => (isSearching.value ? `search-${kw.value}` : `list-${active.value}-${cursor.value}`)),
+})
+
+// GEO：文章列表 ItemList 结构化（列表有数据时注入）
+watch(data, (d: any) => {
+  const list = d?.list || []
+  if (!list.length) return
+  const itemList = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: 'AI 文章站' + (active.value === '全部' ? '' : ' - ' + active.value),
+    numberOfItems: list.length,
+    itemListElement: list.map((a: any, i: number) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      url: `https://www.wcbblll.cc/article/${a.id}`,
+      name: a.title,
+    })),
+  }
+  useHead({
+    script: [{ type: 'application/ld+json', innerHTML: JSON.stringify([itemList]) }],
+  })
 })
 
 function switchTab(c: string) {

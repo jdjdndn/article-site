@@ -1,9 +1,9 @@
 {
   "name": "article-site",
   "compatibility_date": "2026-09-27",
-  "main": "./dist/_worker.js",
+  "main": "./.output/server/index.mjs",
   "assets": {
-    "directory": "./dist",
+    "directory": "./.output/public",
     "binding": "ASSETS"
   },
   "d1_databases": [
@@ -18,5 +18,8 @@
       "pattern": "www.wcbblll.cc",
       "custom_domain": true
     }
-  ]
+  ],
+  "triggers": {
+    "crons": ["* * * * *"]
+  }
 }

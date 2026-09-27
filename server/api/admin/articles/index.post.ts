@@ -2,6 +2,7 @@ import { defineEventHandler, readBody, createError } from 'h3'
 import { requireAdmin } from '../../../utils/auth'
 import { useDb } from '../../../utils/db'
 import { articles } from '../../../db/schema'
+import { checkArticleSafety } from '../../../utils/content-safety'
 
 // POST /api/admin/articles?key=xxx —— 手动新增文章（表单 → JSON → 入库）
 export default defineEventHandler(async (event) => {
@@ -24,15 +25,29 @@ export default defineEventHandler(async (event) => {
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
   const id = `a-${ymd}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`
 
+  // 定时发布：publishAt 已到 → 直接发布；未到 → 强制草稿（等 cron 到点发布）
+  const publishAt = body.publishAt ? String(body.publishAt) : null
+  let status = body.status === 'published' ? 'published' : 'draft'
+  if (publishAt && publishAt > now) status = 'draft'
+
+  // 内容安全兜底：命中违规词 → 强制草稿待人工审核
+  const safety = checkArticleSafety({ title: body.title, summary: body.summary, content })
+  const safetyHits = safety.hits.length > 0 && status === 'published' ? safety.hits : []
+  const needsReview = safetyHits.length > 0 ? 1 : 0
+  if (safetyHits.length > 0) status = 'draft'
+
   const db = useDb()
   await db.insert(articles).values({
     id,
     title: body.title.trim(),
     summary: typeof body.summary === 'string' ? body.summary : '',
     content,
+    template: ['deal', 'guide', 'faq'].includes(body.template) ? body.template : 'default',
     category: body.category,
     tags: normalizeJson(body.tags) ?? '[]',
-    status: body.status === 'published' ? 'published' : 'draft',
+    status: status === 'published' ? 'published' : 'draft',
+    needsReview,
+    publishAt,
     expiresAt: body.expiresAt ? String(body.expiresAt) : null,
     links: normalizeJson(body.links) ?? '[]',
     friendLinks: normalizeJson(body.friendLinks) ?? '[]',
@@ -42,7 +57,7 @@ export default defineEventHandler(async (event) => {
     updatedAt: now,
   })
 
-  return { id, ok: true }
+  return { id, ok: true, safetyHits }
 })
 
 function normalizeJson(v: any): string | null {
