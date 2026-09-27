@@ -36,9 +36,14 @@ async function api(path: string, opts: any = {}) {
   })
 }
 
+const listToday = ref(false)
 async function loadList() {
-  const res = await api('/api/admin/articles')
+  const res = await api('/api/admin/articles', { query: { from: listToday.value ? new Date().toISOString().slice(0, 10) : undefined } })
   articles.value = res.list || []
+}
+function toggleToday() {
+  listToday.value = !listToday.value
+  loadList()
 }
 async function loadTrash() {
   const res = await api('/api/admin/trash')
@@ -501,6 +506,13 @@ async function markReportDone(r: any) {
   if (stats.value) stats.value.openReports = (stats.value.openReports || 1) - 1
 }
 // 热搜词一键转素材（进素材队列，流水线自动生成引流文）
+// 定时流水线运行日志（本机 08:00 脚本上报）
+const runLogs = ref<any[]>([])
+async function loadRunLogs() {
+  const res = await api('/api/admin/run-logs?limit=7')
+  runLogs.value = res.list || []
+}
+
 async function seedFromSearch(q: string) {
   await api('/api/admin/seeds', {
     method: 'POST',
@@ -537,7 +549,7 @@ function switchTab(t: 'list' | 'trash' | 'review' | 'links' | 'seeds' | 'stats')
   else if (t === 'review') loadReview()
   else if (t === 'links') loadLinks()
   else if (t === 'seeds') loadSeeds()
-  else { loadStats(); loadReports() }
+  else { loadStats(); loadReports(); loadRunLogs() }
 }
 
 // 初始加载
@@ -562,6 +574,7 @@ if (key.value) loadList()
           <button :class="{ active: tab === 'seeds' }" @click="switchTab('seeds')">素材队列</button>
           <button :class="{ active: tab === 'stats' }" @click="switchTab('stats')">数据统计</button>
         </div>
+        <a class="ghost" href="https://comments.wcbblll.cc/ui" target="_blank" rel="noopener">评论管理 ↗</a>
         <button v-if="tab === 'list' && mode === 'list'" class="primary" @click="openCreate">＋ 新建文章</button>
         <button v-if="tab === 'list' && mode === 'list'" class="primary" @click="openBatch">⿇ 批量录入</button>
         <button v-if="mode !== 'list'" class="ghost" @click="mode = 'list'">← 返回列表</button>
@@ -807,6 +820,10 @@ if (key.value) loadList()
 
       <!-- 文章列表 -->
       <div v-else-if="tab === 'list'" class="card">
+        <div class="list-filter">
+          <button class="mini" :class="{ on: listToday }" @click="toggleToday">{{ listToday ? '✓ 仅今天发布' : '只看今天发布' }}</button>
+          <span class="hint">8 点自动流水线发文后，可在这里核对当天产出</span>
+        </div>
         <div v-if="!articles.length" class="empty">暂无文章（点"新建文章"创建第一篇）</div>
         <table v-else class="tbl">
           <thead>
@@ -933,7 +950,7 @@ if (key.value) loadList()
             <tr v-for="s in seeds" :key="s.id">
               <td class="title-cell">
                 {{ s.raw.slice(0, 70) }}{{ s.raw.length > 70 ? '…' : '' }}
-                <div class="id">#{{ s.id }} · {{ s.createdAt?.slice(0, 16).replace('T', ' ') }}</div>
+                <div class="id"><span v-if="s.source === 'user'" class="badge seed-user">用户投稿</span> #{{ s.id }} · {{ s.createdAt?.slice(0, 16).replace('T', ' ') }}</div>
                 <div v-if="s.error" class="id err">{{ s.error }}</div>
               </td>
               <td class="muted">{{ s.category }} / {{ s.template }}</td>
@@ -996,6 +1013,21 @@ if (key.value) loadList()
             <button class="mini primary" @click="exportArticles">导出已发布文章（JSON）</button>
             <span class="hint">全量导出含 content/faq/links，方便迁移备份</span>
           </div>
+
+          <h3 class="stats-title">定时流水线（最近 7 次）</h3>
+          <div v-if="!runLogs.length" class="hint">暂无运行记录（本机计划任务每天 08:00 触发，跑完自动上报）</div>
+          <table v-else class="tbl small">
+            <thead><tr><th>时间</th><th>模型</th><th>成功</th><th>失败</th><th>说明</th></tr></thead>
+            <tbody>
+              <tr v-for="r in runLogs" :key="r.id">
+                <td class="muted">{{ r.runAt?.slice(0, 16).replace('T', ' ') }}</td>
+                <td class="muted">{{ r.model }}</td>
+                <td>{{ r.ok }}</td>
+                <td :class="r.fail ? 'err' : ''">{{ r.fail }}</td>
+                <td class="id" :class="r.fail ? 'err' : ''">{{ r.error || (r.dryRun ? 'dry-run 演练' : '') }}</td>
+              </tr>
+            </tbody>
+          </table>
 
           <h3 class="stats-title">即将过期（7 天内到期）</h3>
           <div v-if="!stats.expiringSoon?.length" class="hint">暂无临近过期的文章（引流文不过期）</div>

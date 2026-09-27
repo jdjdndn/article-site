@@ -27,6 +27,20 @@ onMounted(async () => {
   }
 })
 
+let sharedId = ''
+async function shareFav(id: string) {
+  const url = location.origin + '/article/' + id
+  try {
+    if (/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) && navigator.share) {
+      await navigator.share({ title: '分享文章', url })
+    } else {
+      await navigator.clipboard.writeText(url)
+    }
+    sharedId = id
+    setTimeout(() => (sharedId = ''), 2000)
+  } catch { /* 取消/失败忽略 */ }
+}
+
 async function removeFav(id: string) {
   try {
     await $fetch(`/api/articles/${id}/favorite`, { method: 'POST', body: { fp: getFp(), action: 'remove' } })
@@ -55,6 +69,7 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
         <div class="fav-head">
           <span class="cat">{{ f.category || '文章' }}</span>
           <span v-if="f.expiresAt" class="exp">⏰ {{ f.expiresAt }}</span>
+          <button class="share" @click="shareFav(f.id)">{{ sharedId === f.id ? '✓ 已复制' : '🔗 分享' }}</button>
           <button class="unfav" @click="removeFav(f.id)">取消收藏</button>
         </div>
         <NuxtLink :to="`/article/${f.id}`" class="fav-body">
@@ -85,6 +100,19 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
 }
 .fav-item:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
 .fav-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.share {
+  margin-left: auto;
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all .2s;
+  flex-shrink: 0;
+}
+.share:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-weak); }
 .unfav {
   margin-left: auto;
   border: 1px solid var(--border);

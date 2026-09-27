@@ -27,6 +27,8 @@ export default defineEventHandler(async (event) => {
       expiresAt: seeds.expiresAt,
       articleId: seeds.articleId,
       error: seeds.error,
+      source: seeds.source,
+      fp: seeds.fp,
       createdAt: seeds.createdAt,
       updatedAt: seeds.updatedAt,
     })

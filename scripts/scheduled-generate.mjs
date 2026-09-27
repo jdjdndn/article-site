@@ -95,17 +95,31 @@ async function batchCreate(list) {
   })
 }
 
+// —— 运行日志上报（失败不阻塞流水线） ——
+async function reportRun(payload) {
+  try {
+    await apiFetch('/api/admin/run-logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ runAt: new Date().toISOString(), model, dryRun, ...payload }),
+    })
+  } catch (e) { log('[warn] 运行日志上报失败：', e.message) }
+}
+
 // —— 主流程 ——
 async function main() {
+  const runStarted = new Date().toISOString()
   const { list } = await apiFetch('/api/admin/seeds?status=pending&size=10')
   if (!list || !list.length) {
     log('[skip] 素材池没有待处理素材')
+    await reportRun({ runAt: runStarted, total: 0, ok: 0, fail: 0, error: '素材池为空' })
     return
   }
   log(`拉取 ${list.length} 条 pending 素材，模型 ${model}，dry-run=${dryRun}`)
 
   let created = 0
   let failed = 0
+  try {
   for (const s of list) {
     const raw = s.raw || ''
     if (!raw || raw.length < 8) {
@@ -153,6 +167,12 @@ async function main() {
     }
   }
   log(`完成：成功 ${created}，失败 ${failed}${dryRun ? '（dry-run 未入库）' : ''}`)
+  await reportRun({ runAt: runStarted, total: list.length, ok: created, fail: failed })
+  } catch (e) {
+    log('[fatal]', e.message)
+    await reportRun({ runAt: runStarted, total: list.length, ok: created, fail: failed + 1, error: e.message.slice(0, 300) })
+    throw e
+  }
 }
 
 main().catch((e) => { console.error('[fatal]', e); process.exit(1) })

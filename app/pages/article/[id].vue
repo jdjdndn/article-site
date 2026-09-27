@@ -280,7 +280,7 @@ useHead(() => {
             :key="'m' + (l.id ?? i)"
             :href="l.url"
             target="_blank"
-            rel="noopener nofollow"
+            rel="noopener nofollow sponsored"
             class="link-btn"
             @click="trackClick(l)"
           >{{ l.label }}</a>
@@ -292,7 +292,7 @@ useHead(() => {
                 :key="'x' + (l.id ?? i)"
                 :href="l.url"
                 target="_blank"
-                rel="noopener nofollow"
+                rel="noopener nofollow sponsored"
                 class="more-link"
                 @click="trackClick(l)"
               >{{ l.label }}</a>
@@ -312,7 +312,7 @@ useHead(() => {
           <div v-if="isAd(block)" class="ad-block">
             <span class="ad-label">{{ block.label || '广告' }}</span>
             <p>{{ block.text }}</p>
-            <a v-if="block.link" :href="block.link" target="_blank" rel="noopener nofollow" class="ad-link">去看看 →</a>
+            <a v-if="block.link" :href="block.link" target="_blank" rel="noopener nofollow sponsored" class="ad-link">去看看 →</a>
           </div>
           <h2 v-else-if="isH2(block)" class="block-h2">{{ block.text }}</h2>
           <div v-else-if="isList(block)" class="block-list">
@@ -337,7 +337,7 @@ useHead(() => {
             :key="'m' + (l.id ?? i)"
             :href="l.url"
             target="_blank"
-            rel="noopener nofollow"
+            rel="noopener nofollow sponsored"
             class="link-btn"
             @click="trackClick(l)"
           >{{ l.label }}</a>
@@ -349,7 +349,7 @@ useHead(() => {
                 :key="'x' + (l.id ?? i)"
                 :href="l.url"
                 target="_blank"
-                rel="noopener nofollow"
+                rel="noopener nofollow sponsored"
                 class="more-link"
                 @click="trackClick(l)"
               >{{ l.label }}</a>

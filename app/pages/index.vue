@@ -111,6 +111,34 @@ watch(
     if (v !== kw.value) kw.value = (v as string) || ''
   },
 )
+
+// 搜索无结果 → 提交选题（公开投稿，进素材队列，每天 8 点自动生成引流文）
+const topic = ref('')
+const topicBusy = ref(false)
+const topicMsg = ref('')
+function topicFp() {
+  let f = localStorage.getItem('article_fp')
+  if (!f) {
+    f = 'fp-' + Math.random().toString(36).slice(2) + Date.now().toString(36)
+    localStorage.setItem('article_fp', f)
+  }
+  return f
+}
+async function submitTopic() {
+  const t = topic.value.trim()
+  if (t.length < 4) { topicMsg.value = '选题至少 4 个字'; return }
+  topicBusy.value = true
+  topicMsg.value = ''
+  try {
+    await $fetch('/api/submit-topic', { method: 'POST', body: { fp: topicFp(), topic: t } })
+    topicMsg.value = '选题已收到，每天 8 点自动生成，稍后来看'
+    topic.value = ''
+  } catch (e: any) {
+    topicMsg.value = e?.data?.statusMessage || '提交失败，请重试'
+  } finally {
+    topicBusy.value = false
+  }
+}
 </script>
 
 <template>
@@ -159,7 +187,16 @@ watch(
       </div>
     </div>
     <div v-else class="empty">
-      {{ isSearching ? `未找到「${kw}」相关文章` : '暂无文章' }}
+      <template v-if="isSearching">
+        <p>未找到「{{ kw }}」相关文章</p>
+        <div class="topic-submit">
+          <input v-model="topic" type="text" maxlength="60" placeholder="提交你想看的选题，如：XX 使用攻略" />
+          <button class="search-btn" :disabled="topicBusy || topic.trim().length < 4" @click="submitTopic">{{ topicBusy ? '提交中…' : '提交选题' }}</button>
+          <p v-if="topicMsg" class="topic-msg">{{ topicMsg }}</p>
+          <p class="hint">收到后会进入自动生成队列，每天 8 点产出文章</p>
+        </div>
+      </template>
+      <template v-else>暂无文章</template>
     </div>
   </div>
 </template>
@@ -291,6 +328,15 @@ watch(
 .pager button:disabled { opacity: .5; cursor: not-allowed; }
 
 .loading, .empty { text-align: center; color: var(--text-muted); padding: 48px 0; font-size: 14px; }
+.topic-submit { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+.topic-submit input {
+  width: min(320px, 72vw);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 14px;
+}
+.topic-msg { width: 100%; color: var(--primary); font-size: 13px; margin-top: 6px; }
 
 @media (max-width: 600px) {
   .tab { padding: 6px 13px; font-size: 13px; }

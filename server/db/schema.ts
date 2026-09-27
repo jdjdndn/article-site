@@ -81,10 +81,13 @@ export const seeds = sqliteTable('seeds', {
   expiresAt: text('expires_at'),
   articleId: text('article_id'),
   error: text('error'),
+  source: text('source').notNull().default('admin'), // admin=后台/热搜转素材, user=用户投稿
+  fp: text('fp').notNull().default(''),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, (t) => [
   index('idx_seeds_status').on(t.status),
+  index('idx_seeds_source_fp').on(t.source, t.fp),
 ])
 
 export type Seed = typeof seeds.$inferSelect
@@ -114,3 +117,20 @@ export const reports = sqliteTable('reports', {
 ])
 
 export type Report = typeof reports.$inferSelect
+
+// 定时流水线运行日志（本机 08:00 脚本每次运行上报；看板最近 7 次）
+export const runLogs = sqliteTable('run_logs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  runAt: text('run_at').notNull(),
+  model: text('model').notNull().default(''),
+  total: integer('total').notNull().default(0),
+  ok: integer('ok').notNull().default(0),
+  fail: integer('fail').notNull().default(0),
+  error: text('error'),
+  dryRun: integer('dry_run').notNull().default(0),
+  createdAt: text('created_at').notNull(),
+}, (t) => [
+  index('idx_run_logs_created').on(t.createdAt),
+])
+
+export type RunLog = typeof runLogs.$inferSelect

@@ -1,5 +1,5 @@
 import { defineEventHandler, getQuery, createError } from 'h3'
-import { and, eq, ne, desc, lt, sql } from 'drizzle-orm'
+import { and, eq, ne, desc, lt, gte, sql } from 'drizzle-orm'
 import { requireAdmin } from '../../../utils/auth'
 import { useDb } from '../../../utils/db'
 import { articles } from '../../../db/schema'
@@ -11,6 +11,7 @@ export default defineEventHandler(async (event) => {
   const q = getQuery(event)
   const status = typeof q.status === 'string' && q.status ? q.status : ''
   const needsReview = q.needsReview === '1'
+  const from = typeof q.from === 'string' && q.from ? q.from.slice(0, 10) : ''
   const cursor = typeof q.cursor === 'string' ? q.cursor : ''
   const limit = Math.min(Number(q.limit) || 20, 100)
   const db = useDb()
@@ -19,6 +20,7 @@ export default defineEventHandler(async (event) => {
   if (status) conds.push(eq(articles.status, status))
   if (needsReview) conds.push(eq(articles.needsReview, 1))
   if (cursor) conds.push(lt(articles.updatedAt, cursor))
+  if (from) conds.push(gte(articles.updatedAt, from + 'T00:00:00.000Z'))
 
   const list = await db
     .select({
