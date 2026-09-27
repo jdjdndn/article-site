@@ -15,6 +15,11 @@ useHead(() => ({
     { property: 'og:url', content: 'https://www.wcbblll.cc' },
     { property: 'og:title', content: 'AI 文章站' },
     { property: 'og:description', content: '优惠攻略、好物推荐、副业指南，每日更新。' },
+    { property: 'og:image', content: 'https://www.wcbblll.cc/og-cover.png' },
+    { name: 'twitter:card', content: 'summary_large_image' },
+    { name: 'twitter:title', content: 'AI 文章站' },
+    { name: 'twitter:description', content: '优惠攻略、好物推荐、副业指南，每日更新。' },
+    { name: 'twitter:image', content: 'https://www.wcbblll.cc/og-cover.png' },
   ],
   script: [{
     type: 'application/ld+json',
@@ -179,6 +184,7 @@ async function submitTopic() {
         <p class="summary">{{ a.summary }}</p>
         <div class="meta">
           <span class="category">{{ a.category }}</span>
+          <span v-if="a.updatedAt" class="date">{{ (a.updatedAt || '').slice(0, 10) }}</span>
           <span v-if="a.expiresAt" class="expire">有效期至 {{ a.expiresAt }}</span>
         </div>
       </NuxtLink>
@@ -323,6 +329,8 @@ async function submitTopic() {
   border-radius: 999px;
 }
 .expire::before { content: '⏰'; font-size: 11px; }
+.date { color: var(--text-muted); }
+.date::before { content: '📅'; font-size: 11px; margin-right: 3px; }
 
 /* 分页 */
 .pager { text-align: center; margin-top: 20px; }

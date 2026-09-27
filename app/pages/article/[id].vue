@@ -109,17 +109,18 @@ const shareDone = ref(false)
 const copyFail = ref('')
 async function copyLink() {
   const url = `https://www.wcbblll.cc/article/${id.value}`
+  const shareText = `${data.value?.article?.title}｜${data.value?.article?.summary || ''}\n${url}`
   copyFail.value = ''
-  // 1) 移动端系统分享
+  // 1) 移动端系统分享（带标题+摘要文案）
   if (/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) && navigator.share) {
     try {
-      await navigator.share({ title: data.value?.article?.title, url })
+      await navigator.share({ title: data.value?.article?.title, text: shareText, url })
       return
     } catch { /* 用户取消分享：继续尝试复制 */ }
   }
-  // 2) 剪贴板 API
+  // 2) 剪贴板 API（复制"标题｜摘要 + 链接"，微信/QQ 粘贴即是完整分享文案）
   try {
-    await navigator.clipboard.writeText(url)
+    await navigator.clipboard.writeText(shareText)
     shareDone.value = true
     setTimeout(() => (shareDone.value = false), 2000)
     return
@@ -229,6 +230,11 @@ useHead(() => {
       { property: 'og:title', content: a.title },
       { property: 'og:description', content: a.summary },
       { property: 'og:site_name', content: 'AI 文章站' },
+      { property: 'og:image', content: 'https://www.wcbblll.cc/og-cover.png' },
+      { name: 'twitter:card', content: 'summary_large_image' },
+      { name: 'twitter:title', content: a.title },
+      { name: 'twitter:description', content: a.summary },
+      { name: 'twitter:image', content: 'https://www.wcbblll.cc/og-cover.png' },
     ],
     script: [{ type: 'application/ld+json', innerHTML: JSON.stringify(ld) }],
   }
@@ -267,6 +273,7 @@ useHead(() => {
       <p class="summary">{{ data.article.summary }}</p>
       <div class="meta">
         <span v-if="data.article.expiresAt" class="expire">⏰ 优惠截止：{{ data.article.expiresAt }}</span>
+        <span class="published">发布于 {{ formatDate(data.article.createdAt) }}</span>
         <span class="time">更新于 {{ formatDate(data.article.updatedAt) }}</span>
         <button
           class="fav-btn"
@@ -470,6 +477,8 @@ useHead(() => {
   align-items: center;
 }
 .meta .time { display: inline-flex; align-items: center; gap: 4px; }
+.meta .published { display: inline-flex; align-items: center; gap: 4px; }
+.meta .published::before { content: '📅'; font-size: 11px; }
 .meta .time::before { content: '🕒'; font-size: 11px; }
 .expire {
   display: inline-flex;

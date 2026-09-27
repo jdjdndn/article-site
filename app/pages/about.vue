@@ -2,6 +2,16 @@
 useHead({
   title: '关于本站 - AI 文章站',
   link: [{ rel: 'canonical', href: 'https://www.wcbblll.cc/about' }],
+  meta: [
+    { name: 'description', content: 'AI 文章站：优惠攻略、好物推荐、副业指南，关于本站与推广免责声明。' },
+    { property: 'og:title', content: '关于本站 - AI 文章站' },
+    { property: 'og:description', content: 'AI 文章站：优惠攻略、好物推荐、副业指南，关于本站与推广免责声明。' },
+    { property: 'og:image', content: 'https://www.wcbblll.cc/og-cover.png' },
+    { name: 'twitter:card', content: 'summary_large_image' },
+    { name: 'twitter:title', content: '关于本站 - AI 文章站' },
+    { name: 'twitter:description', content: 'AI 文章站：优惠攻略、好物推荐、副业指南，关于本站与推广免责声明。' },
+    { name: 'twitter:image', content: 'https://www.wcbblll.cc/og-cover.png' },
+  ],
 })
 </script>
 

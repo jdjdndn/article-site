@@ -25,6 +25,8 @@
       <NuxtPage />
     </main>
 
+    <BackTop />
+
     <footer class="site-footer">
       <div class="container footer-inner">
         <span class="footer-copy">© 2026 AI 文章站 · 优惠攻略 · 好物推荐 · 副业指南</span>

@@ -29,12 +29,14 @@ onMounted(async () => {
 
 let sharedId = ''
 async function shareFav(id: string) {
+  const item = list.value.find((f: any) => f.id === id)
   const url = location.origin + '/article/' + id
+  const shareText = `${item?.title || 'AI 文章站好文'}｜${item?.summary || ''}\n${url}`
   try {
     if (/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) && navigator.share) {
-      await navigator.share({ title: '分享文章', url })
+      await navigator.share({ title: item?.title || 'AI 文章站', text: shareText, url })
     } else {
-      await navigator.clipboard.writeText(url)
+      await navigator.clipboard.writeText(shareText)
     }
     sharedId = id
     setTimeout(() => (sharedId = ''), 2000)
