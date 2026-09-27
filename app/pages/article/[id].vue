@@ -30,6 +30,7 @@ onMounted(() => {
     favorited.value = !!data.value?.favorited
     favoriteCount.value = data.value?.favoriteCount ?? 0
   })
+  initPlyr()
 })
 
 async function toggleFavorite() {
@@ -50,6 +51,21 @@ const isPrice = (b: any) => b?.type === 'price'
 const isQuote = (b: any) => b?.type === 'quote'
 const isImage = (b: any) => b?.type === 'image'
 const isVideo = (b: any) => b?.type === 'video'
+// 视频直链判定：mp4/webm/ogg/m4v/m3u8 可内嵌播放；其余（bilibili/抖音页面链接）走卡片跳转
+function isPlayableUrl(u: string) { return /\.(mp4|webm|ogg|m4v|m3u8)(\?|#|$)/i.test(u || '') }
+const videoEls: HTMLVideoElement[] = []
+function setVideo(el: any) { if (el && !videoEls.includes(el)) videoEls.push(el) }
+async function initPlyr() {
+  if (!import.meta.client) return
+  const vids = videoEls.filter((v: any) => v && !v.dataset.plyrReady)
+  if (!vids.length) return
+  const mod: any = await import('plyr')
+  await import('plyr/dist/plyr.css')
+  for (const v of vids) {
+    v.dataset.plyrReady = '1'
+    new mod.default(v, { controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'fullscreen'] })
+  }
+}
 // 文章模板：default / deal（商品带货）/ guide（攻略）/ faq（问答）
 const tmpl = computed(() => {
   const t = data.value?.article?.template
@@ -330,13 +346,22 @@ useHead(() => {
             <figcaption>{{ block.caption ? block.caption + ' · ' : '' }}图源：网络</figcaption>
           </figure>
           <div v-else-if="isVideo(block)" class="block-video">
-            <a :href="block.url" target="_blank" rel="noopener nofollow sponsored" class="video-card">
+            <video
+              v-if="isPlayableUrl(block.url)"
+              :ref="setVideo"
+              :src="block.url"
+              :poster="block.poster || ''"
+              controls
+              playsinline
+            ></video>
+            <a v-else :href="block.url" target="_blank" rel="noopener nofollow sponsored" class="video-card">
               <span class="video-play">▶</span>
               <span class="video-info">
                 <span class="video-title">{{ block.title || '视频' }}</span>
                 <span class="video-src">来源：网络 · 点击前往观看</span>
               </span>
             </a>
+            <p class="video-src-tip">{{ block.title ? block.title + ' · ' : '' }}视频来源：网络</p>
           </div>
           <p v-else class="text-block">{{ block.text }}</p>
         </template>
@@ -636,6 +661,8 @@ useHead(() => {
 .block-image img { max-width: 100%; border-radius: 12px; display: block; box-shadow: var(--shadow-sm); }
 .block-image figcaption { font-size: 12px; color: var(--text-muted); margin-top: 6px; text-align: center; }
 .block-video { margin: 16px 0; }
+.block-video video, .block-video .plyr { width: 100%; border-radius: 12px; display: block; }
+.video-src-tip { font-size: 12px; color: var(--text-muted); margin-top: 6px; text-align: center; }
 .video-card {
   display: flex; align-items: center; gap: 14px;
   border: 1px solid var(--border); border-radius: 12px;
