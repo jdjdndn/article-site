@@ -49,6 +49,7 @@ const isList = (b: any) => b?.type === 'list'
 const isPrice = (b: any) => b?.type === 'price'
 const isQuote = (b: any) => b?.type === 'quote'
 const isImage = (b: any) => b?.type === 'image'
+const isVideo = (b: any) => b?.type === 'video'
 // 文章模板：default / deal（商品带货）/ guide（攻略）/ faq（问答）
 const tmpl = computed(() => {
   const t = data.value?.article?.template
@@ -325,8 +326,18 @@ useHead(() => {
           </div>
           <div v-else-if="isQuote(block)" class="block-quote" :class="block.tone === 'warn' ? 'warn' : 'info'">{{ block.text }}</div>
           <figure v-else-if="isImage(block)" class="block-image">
-            <img :src="block.url" :alt="block.alt || data.article.title" loading="lazy" />
+            <img :src="block.url" :alt="block.alt || data.article.title" loading="lazy" referrerpolicy="no-referrer" />
+            <figcaption>{{ block.caption ? block.caption + ' · ' : '' }}图源：网络</figcaption>
           </figure>
+          <div v-else-if="isVideo(block)" class="block-video">
+            <a :href="block.url" target="_blank" rel="noopener nofollow sponsored" class="video-card">
+              <span class="video-play">▶</span>
+              <span class="video-info">
+                <span class="video-title">{{ block.title || '视频' }}</span>
+                <span class="video-src">来源：网络 · 点击前往观看</span>
+              </span>
+            </a>
+          </div>
           <p v-else class="text-block">{{ block.text }}</p>
         </template>
 
@@ -623,6 +634,23 @@ useHead(() => {
 .block-quote.info::before { content: '💡 '; }
 .block-image { margin: 16px 0; }
 .block-image img { max-width: 100%; border-radius: 12px; display: block; box-shadow: var(--shadow-sm); }
+.block-image figcaption { font-size: 12px; color: var(--text-muted); margin-top: 6px; text-align: center; }
+.block-video { margin: 16px 0; }
+.video-card {
+  display: flex; align-items: center; gap: 14px;
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 16px; text-decoration: none; background: #fff;
+  transition: box-shadow .2s, transform .15s;
+}
+.video-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+.video-play {
+  width: 44px; height: 44px; flex-shrink: 0;
+  border-radius: 50%; background: linear-gradient(180deg, var(--primary), var(--primary-strong));
+  color: #fff; font-size: 16px; display: flex; align-items: center; justify-content: center;
+}
+.video-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.video-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.video-src { font-size: 12px; color: var(--text-muted); }
 .top-links { margin: 0 0 18px; }
 
 .ad-block {
