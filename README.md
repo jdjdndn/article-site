@@ -188,7 +188,34 @@
 
 详情页「☆ 收藏」（设备指纹免注册）→ 导航「收藏」页 `/favorites`（CSR，noindex）。
 
-### 管理### 管理
+### 素材池（云端 D1 + 定时 AI 流水线）
+
+素材从本地 JSON 文件迁移到线上 `seeds` 表，后台「素材队列」tab 可视化管理：
+
+- **添加**：粘贴原始素材（多条空行分隔）→ 自动切分入库（pending）；也可 API `POST /api/admin/seeds`
+- **状态闭环**：pending（待生成）→ done（已生成，关联 articleId）→ 失败可「重试」放回队列
+- **定时流水线**（Windows 计划任务 `ArticleSite-AIGenerate` 每天 08:00）：
+  `GET /api/admin/seeds?status=pending` 拉取 → 本机 AI 网关（免费网页版模型，去 AI 味+结构化）→
+  `POST /api/admin/articles/batch` 入库 → 逐条标记 done/fail（失败原因入库）
+- 单次最多处理 10 条；素材可带 category/template/publishAt（定时）/expiresAt，全部传给 AI 模板与入库
+- 手动跑：`node scripts/scheduled-generate.mjs`（`--dry-run` 只生成不入库，`--model=kimi` 换模型）
+
+### 数据统计（后台最小看板）
+
+后台「数据统计」tab：文章总数/各状态分布/分类分布（条形图）/累计与今日点击/待生成素材。
+API `GET /api/admin/stats?key=`（聚合查询，admin-only，量级小不占资源）。
+
+### 配置化
+
+- 分类 tab：`app/config/site.ts` 的 `SITE_CATEGORIES`（前台/后台/API 共用，新增分类改一行）
+- 首页公告条：`SITE_BANNERS`（text/link/highlight，可多条，空数组=隐藏）
+
+### 备份
+
+`node scripts/backup-d1.mjs` 导出全部 D1 数据到 `backups/article-db-YYYYMMDD.sql`
+（本地执行，不占线上资源；建议每周一次，可用计划任务定时）。
+
+### 管理### 管理### 管理
 
 - 列表可编辑/软删；回收站可恢复/永久删除（永久删除不可恢复）
 - 无 key 访问后台与 API 一律 401
