@@ -5,6 +5,7 @@ import { ref, onMounted } from 'vue'
 const list = ref<any[]>([])
 const loading = ref(true)
 const err = ref('')
+const removeErr = ref('')
 
 function getFp() {
   let f = localStorage.getItem('article_fp')
@@ -51,8 +52,9 @@ async function removeFav(id: string) {
   try {
     await $fetch(`/api/articles/${id}/favorite`, { method: 'POST', body: { fp: getFp(), action: 'remove' } })
     list.value = list.value.filter((f: any) => f.id !== id)
+    removeErr.value = ''
   } catch (e: any) {
-    alert(e?.data?.statusMessage || '取消失败，请重试')
+    removeErr.value = e?.data?.statusMessage || '取消失败，请重试'
   }
 }
 
@@ -71,6 +73,7 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
     </div>
 
     <div v-else class="fav-list">
+      <p v-if="removeErr" class="remove-err">{{ removeErr }}</p>
       <div class="fav-filter">
         <button
           v-for="c in cats"
@@ -106,6 +109,7 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
 .empty { text-align: center; color: var(--text-muted); padding: 10px 0; font-size: 14px; }
 .link { color: var(--primary); text-decoration: none; }
 .fav-list { display: flex; flex-direction: column; gap: 12px; }
+.remove-err { color: #dc2626; font-size: 13px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 8px 12px; margin: 0; }
 .fav-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
 .fav-filter .mini { padding: 4px 14px; }
 .fav-item {

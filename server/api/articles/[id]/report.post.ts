@@ -30,6 +30,13 @@ export default defineEventHandler(async (event) => {
     .limit(1)
   if (recent.length) throw createError({ statusCode: 429, statusMessage: '已收到你的反馈，请稍后再试' })
 
+  // 全局限频（防刷）：同设备 24h ≤ 10 条
+  const [dayCount] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(reports)
+    .where(and(eq(reports.fp, fp), gte(reports.createdAt, sql`datetime('now', '-1 day')`)))
+  if ((dayCount?.n ?? 0) >= 10) throw createError({ statusCode: 429, statusMessage: '今日反馈已达上限，感谢支持' })
+
   await db.insert(reports).values({
     articleId: id,
     fp,

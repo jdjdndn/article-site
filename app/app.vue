@@ -29,7 +29,12 @@
 
     <footer class="site-footer">
       <div class="container footer-inner">
-        <span class="footer-copy">© 2026 AI 文章站 · 优惠攻略 · 好物推荐 · 副业指南</span>
+        <div class="footer-col">
+          <span class="footer-copy">© 2026 AI 文章站 · 优惠攻略 · 好物推荐 · 副业指南</span>
+          <nav class="footer-nav">
+            <NuxtLink v-for="c in ['优惠', '攻略', '好物', '副业']" :key="c" :to="{ path: '/', query: { cat: c } }" class="footer-link">{{ c }}</NuxtLink>
+          </nav>
+        </div>
         <div class="friend-links">
           <a href="https://jdjdndn.github.io" target="_blank" rel="noopener">jdjdndn.github.io</a>
           <a href="https://wcbblll.cc" target="_blank" rel="noopener">wcbblll.cc</a>
@@ -108,6 +113,19 @@ main { flex: 1; padding: 28px 0 48px; }
   background: linear-gradient(180deg, #ffffff, #f1f5f9);
 }
 .footer-inner { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; color: var(--text-muted); font-size: 13px; }
+.footer-col { display: flex; flex-direction: column; gap: 10px; }
+.footer-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+.footer-link {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: var(--primary-weak);
+  color: var(--primary);
+  text-decoration: none;
+  font-size: 12px;
+  transition: background .2s;
+}
+.footer-link:hover { background: #dbeafe; }
 .friend-links a {
   display: inline-block;
   padding: 3px 10px;

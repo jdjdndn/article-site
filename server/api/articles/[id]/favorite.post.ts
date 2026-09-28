@@ -1,5 +1,5 @@
 import { defineEventHandler, getRouterParam, readBody, createError } from 'h3'
-import { eq, and, sql } from 'drizzle-orm'
+import { eq, and, gte, sql } from 'drizzle-orm'
 import { useDb } from '../../../utils/db'
 import { favorites, articles } from '../../../db/schema'
 
@@ -22,6 +22,17 @@ export default defineEventHandler(async (event) => {
   if (action === 'remove') {
     await db.delete(favorites).where(and(eq(favorites.articleId, id), eq(favorites.deviceFp, fp)))
   } else {
+    // 防刷（deviceFp 可伪造，须节流）：同设备最近 5 分钟 add ≤ 20 次；收藏总量 ≤ 300
+    const [recentAdd] = await db
+      .select({ n: sql<number>`count(*)` })
+      .from(favorites)
+      .where(and(eq(favorites.deviceFp, fp), gte(favorites.createdAt, sql`datetime('now', '-5 minutes')`)))
+    if ((recentAdd?.n ?? 0) >= 20) throw createError({ statusCode: 429, statusMessage: '操作太频繁，请稍后再试' })
+    const [total] = await db
+      .select({ n: sql<number>`count(*)` })
+      .from(favorites)
+      .where(eq(favorites.deviceFp, fp))
+    if ((total?.n ?? 0) >= 300) throw createError({ statusCode: 429, statusMessage: '收藏已达上限，请先清理一些' })
     // 唯一约束冲突则忽略（幂等）
     await db
       .insert(favorites)

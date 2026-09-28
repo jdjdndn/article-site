@@ -66,6 +66,13 @@ export default defineEventHandler(async (event) => {
     GROUP BY c.link_id ORDER BY n DESC LIMIT 15`)
   const topLinks = (linkRes.results || []) as { link_id: number; n: number; label: string | null; domain: string | null; url: string | null }[]
 
+  // 收藏 Top10（运营反馈：哪些内容值得收藏/复访）
+  const favRes = await db.run(sql`
+    SELECT f.article_id, count(*) AS n, MAX(a.title) AS title, MAX(a.category) AS category
+    FROM favorites f LEFT JOIN articles a ON a.id = f.article_id
+    GROUP BY f.article_id ORDER BY n DESC LIMIT 10`)
+  const topFavorites = (favRes.results || []) as { article_id: string; n: number; title: string | null; category: string | null }[]
+
   // 待补链接文章数（已发布且没有任何链接的引流文——运营提醒）
   const [pendingLinksRow] = await db
     .select({ n: sql<number>`count(*)` })
@@ -91,6 +98,7 @@ export default defineEventHandler(async (event) => {
     pendingSeeds: pendingSeeds?.n ?? 0,
     topClicks,
     topLinks,
+    topFavorites,
     todaySearches: todaySearches?.n ?? 0,
     topSearches,
     expiringSoon,

@@ -9,5 +9,5 @@ export interface Banner {
   highlight?: boolean // 是否高亮强调
 }
 export const SITE_BANNERS: Banner[] = [
-  { text: '🛒 每日更新优惠好物，收藏功能已上线', link: '/favorites' },
+  { text: '每日更新优惠好物，收藏功能已上线', link: '/favorites', highlight: true },
 ]

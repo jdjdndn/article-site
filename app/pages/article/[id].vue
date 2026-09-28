@@ -108,6 +108,14 @@ const mainLinks = computed(() => (data.value?.article?.links || []).filter((l: a
 const moreLinks = computed(() => (data.value?.article?.links || []).filter((l: any) => l.kind === 'more'))
 const showMore = ref(false)
 
+// 已下架页搜索（死链回收：直接搜同类内容）
+const goneKw = ref('')
+const router = useRouter()
+function searchGone() {
+  const kw = goneKw.value.trim()
+  if (kw) router.push({ path: '/', query: { q: kw } })
+}
+
 // 点击上报（不拦截跳转、不改链接地址；sendBeacon 异步零阻塞）
 function trackClick(l: any) {
   if (!import.meta.client) return
@@ -276,12 +284,16 @@ useHead(() => {
       {{ error?.statusMessage || '文章不存在或已下架' }}
     </div>
 
-    <!-- 已下架/已删除：410 兜底页 + 相关推荐（流量回收） -->
+    <!-- 已下架/已删除：410 兜底页 + 搜索 + 相关推荐（流量回收） -->
     <div v-else-if="data.status === 'gone'" class="gone card">
       <div class="gone-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13h4l2 3h4l2-3h4"/><path d="M4 13V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8"/></svg></div>
       <h1>这篇文章已下架</h1>
       <p v-if="data.article.expiresAt">优惠/活动已于 {{ formatDate(data.article.expiresAt) }} 结束</p>
-      <p class="gone-tip">看看其他文章吧</p>
+      <p class="gone-tip">试试搜索同类内容，或者看看下面的相关文章</p>
+      <form class="gone-search" @submit.prevent="searchGone">
+        <input v-model="goneKw" type="search" placeholder="搜索文章，如：牛奶 / 领券 / 网盘" aria-label="搜索文章" />
+        <button type="submit" class="gone-btn-sm">搜索</button>
+      </form>
       <div v-if="data.related?.length" class="related-list">
         <NuxtLink v-for="r in data.related" :key="r.id" :to="`/article/${r.id}`" class="related-item">{{ r.title }}</NuxtLink>
       </div>
@@ -298,6 +310,7 @@ useHead(() => {
 
       <h1 class="title">{{ data.article.title }}</h1>
       <p class="summary">{{ data.article.summary }}</p>
+      <p class="ai-note"><span class="ai-badge">AI 整理</span>文中含推广链接，价格与优惠以实际页面为准</p>
       <div class="meta">
         <div class="meta-info">
           <span v-if="data.article.expiresAt" class="expire">优惠截止：{{ data.article.expiresAt }}</span>
@@ -354,6 +367,7 @@ useHead(() => {
       <article class="content card" :class="'tmpl-' + tmpl">
         <!-- deal 模板：购买入口前置 -->
         <div v-if="tmpl === 'deal' && mainLinks.length" class="links top-links">
+          <span class="ad-note"><b class="ad-badge">广告</b>以下链接为第三方推广，请按需理性消费</span>
           <a
             v-for="(l, i) in mainLinks"
             :key="'m' + (l.id ?? i)"
@@ -444,6 +458,7 @@ useHead(() => {
 
         <!-- 非 deal 模板：链接按钮放正文后 -->
         <div v-if="tmpl !== 'deal' && mainLinks.length" class="links">
+          <span class="ad-note"><b class="ad-badge">广告</b>以下链接为第三方推广，请按需理性消费</span>
           <a
             v-for="(l, i) in mainLinks"
             :key="'m' + (l.id ?? i)"
@@ -516,7 +531,18 @@ useHead(() => {
 .breadcrumb a { color: var(--primary); text-decoration: none; transition: opacity .2s; }
 .breadcrumb a:hover { opacity: .8; }
 .title { font-size: 23px; line-height: 1.45; margin-bottom: 8px; color: var(--text); font-weight: 700; }
-.summary { color: var(--text-muted); margin-bottom: 12px; font-size: 14px; }
+.summary { color: var(--text-muted); margin-bottom: 10px; font-size: 14px; }
+.ai-note { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); margin: 0 0 12px; }
+.ai-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #eef2f7;
+  border: 1px solid #e2e8f0;
+  color: var(--text-muted);
+  font-weight: 500;
+  flex-shrink: 0;
+}
 .meta {
   display: flex;
   align-items: center;
@@ -754,7 +780,31 @@ useHead(() => {
 .gone-icon svg { width: 100%; height: 100%; }
 .gone h1 { font-size: 20px; margin-bottom: 8px; color: var(--text); }
 .gone p { color: var(--text-muted); font-size: 14px; margin: 4px 0; }
-.gone-tip { margin-bottom: 18px !important; }
+.gone-tip { margin-bottom: 16px !important; }
+.gone-search { display: flex; gap: 10px; justify-content: center; max-width: 420px; margin: 0 auto 20px; }
+.gone-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  background: #fff;
+  color: var(--text);
+}
+.gone-search input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
+.gone-btn-sm {
+  padding: 9px 18px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--primary), var(--primary-strong));
+  color: #fff;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
 .related-list { display: flex; flex-direction: column; gap: 6px; max-width: 420px; margin: 0 auto 20px; }
 .gone-btn {
   display: inline-block;
@@ -913,6 +963,17 @@ useHead(() => {
 .faq details p { color: var(--text-muted); margin: 2px 0 10px 18px; font-size: 14px; line-height: 1.75; }
 
 .links { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
+.ad-note { flex-basis: 100%; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+.ad-badge {
+  font-weight: 600;
+  color: #b45309;
+  background: var(--accent-weak);
+  border: 1px solid #fde68a;
+  border-radius: 4px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 1.6;
+}
 .link-btn {
   display: inline-block;
   padding: 10px 24px;

@@ -765,7 +765,7 @@ if (key.value) loadList()
           <h1 class="title">{{ preview.title || '（未填标题）' }}</h1>
           <p class="summary">{{ preview.summary }}</p>
           <div class="meta">
-            <span v-if="preview.expiresAt" class="expire">⏰ 优惠截止：{{ preview.expiresAt }}</span>
+            <span v-if="preview.expiresAt" class="expire"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9.5v3.5l2.5 1.5"/><path d="M4.5 4.5 3 6M19.5 4.5 21 6"/></svg>优惠截止：{{ preview.expiresAt }}</span>
             <span class="time">状态：{{ preview.status }}</span>
             <span class="time">模板：{{ preview.template || 'default' }}</span>
           </div>
@@ -1060,6 +1060,17 @@ if (key.value) loadList()
               <NuxtLink v-if="c.title" :to="`/article/${c.article_id}`" target="_blank" class="rank-title">{{ c.title }}</NuxtLink>
               <span v-else class="rank-title muted">{{ c.article_id }}</span>
               <span class="rank-n">{{ c.n }} 次</span>
+            </li>
+          </ol>
+
+          <h3 class="stats-title">收藏 Top10（用户主动收藏）</h3>
+          <div v-if="!stats.topFavorites?.length" class="hint">暂无收藏数据（读者在文章详情页点收藏后统计）</div>
+          <ol v-else class="rank-list">
+            <li v-for="(f, i) in stats.topFavorites" :key="f.article_id">
+              <span class="rank-no">{{ i + 1 }}</span>
+              <NuxtLink v-if="f.title" :to="`/article/${f.article_id}`" target="_blank" class="rank-title">{{ f.title }}</NuxtLink>
+              <span v-else class="rank-title muted">{{ f.article_id }}</span>
+              <span class="rank-n">{{ f.n }} 次</span>
             </li>
           </ol>
 
