@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -43,9 +43,9 @@ useHead(() => ({
   }],
 }))
 
-// 分类 tab（配置驱动：app/config/site.ts）；counts 用于空分类置灰
+// 分类 tab（配置驱动：app/config/site.ts）；"全部"为显式 tab（点分类可随时回来）
 import { SITE_CATEGORIES, SITE_BANNERS } from '../config/site'
-const categories = ref([...SITE_CATEGORIES])
+const categories = ref(['全部', ...SITE_CATEGORIES])
 const { data: catCounts } = await useFetch('/api/categories', { key: 'cat-counts' })
 // 分类状态与 URL ?cat= 双向同步（分享/刷新/搜索引擎落点保持一致）
 const catFromUrl = (route.query.cat as string) || ''
@@ -56,14 +56,15 @@ const perPage = 20
 const kw = ref((route.query.q as string) || '')
 const isSearching = computed(() => !!kw.value)
 const cursor = ref('')
+const searchPage = ref(1)
 
-// 列表数据：搜索态走 /api/articles/search，否则 /api/articles（游标分页）
+// 列表数据：搜索态走 /api/articles/search（OFFSET 翻页），否则 /api/articles（游标分页）
 const { data, status, refresh } = await useFetch(isSearching.value ? '/api/articles/search' : '/api/articles', {
   query: computed(() => {
-    if (isSearching.value) return { q: kw.value, limit: perPage }
+    if (isSearching.value) return { q: kw.value, page: searchPage.value, limit: perPage }
     return { category: active.value === '全部' ? '' : active.value, cursor: cursor.value, limit: perPage }
   }),
-  key: computed(() => (isSearching.value ? `search-${kw.value}` : `list-${active.value}-${cursor.value}`)),
+  key: computed(() => (isSearching.value ? `search-${kw.value}-${searchPage.value}` : `list-${active.value}-${cursor.value}`)),
 })
 
 // GEO：文章列表 ItemList 结构化（列表有数据时注入）
@@ -88,12 +89,12 @@ watch(data, (d: any) => {
 })
 
 function switchTab(c: string) {
-  // 再点已选分类 = 取消过滤，回到"全部"
-  const next = active.value === c ? '全部' : c
-  active.value = next
+  // "全部"为显式 tab：点分类切分类，点"全部"回全部
+  active.value = c
   kw.value = ''
   cursor.value = ''
-  router.replace({ query: { ...route.query, cat: next === '全部' ? undefined : next, q: undefined } })
+  searchPage.value = 1
+  router.replace({ query: { ...route.query, cat: c === '全部' ? undefined : c, q: undefined } })
   refresh()
 }
 
@@ -108,14 +109,27 @@ watch(kw, (v) => {
 
 function doSearch() {
   const q = kw.value.trim()
+  searchPage.value = 1
   router.replace({ query: { ...route.query, q: q || undefined, cat: undefined } })
   refresh()
 }
 
-// 加载更多（loading 态防重复点击）
+// 加载更多：搜索态走 OFFSET 翻页，列表态走游标；loading 态防重复点击
 const loadMoreBusy = ref(false)
 async function loadMore() {
-  if (!data.value?.nextCursor || loadMoreBusy.value) return
+  if (loadMoreBusy.value) return
+  if (isSearching.value) {
+    if (!data.value?.hasMore) return
+    loadMoreBusy.value = true
+    try {
+      searchPage.value = (data.value?.nextPage || searchPage.value + 1)
+      await refresh()
+    } finally {
+      loadMoreBusy.value = false
+    }
+    return
+  }
+  if (!data.value?.nextCursor) return
   loadMoreBusy.value = true
   try {
     cursor.value = data.value.nextCursor
@@ -124,6 +138,8 @@ async function loadMore() {
     loadMoreBusy.value = false
   }
 }
+
+const hasMore = computed(() => (isSearching.value ? !!data.value?.hasMore : !!data.value?.nextCursor))
 
 watch(
   () => route.query.q,
@@ -138,12 +154,43 @@ watch(
   (v) => {
     const c = (v as string) || ''
     if (categories.value.includes(c)) {
-      if (c !== active.value) { active.value = c; cursor.value = ''; refresh() }
+      if (c !== active.value) { active.value = c; cursor.value = ''; searchPage.value = 1; refresh() }
     } else if (active.value !== '全部') {
-      active.value = '全部'; cursor.value = ''; refresh()
+      active.value = '全部'; cursor.value = ''; searchPage.value = 1; refresh()
     }
   },
 )
+
+// —— 列表项收藏（CSR 补状态：不动 SSR 缓存；星标点击直接切换） ——
+const favSet = ref<Set<string>>(new Set())
+const favBusyId = ref('')
+function getFp() {
+  let f = localStorage.getItem('article_fp')
+  if (!f) {
+    f = 'fp-' + Math.random().toString(36).slice(2) + Date.now().toString(36)
+    localStorage.setItem('article_fp', f)
+  }
+  return f
+}
+onMounted(async () => {
+  try {
+    const fp = getFp()
+    const res = await $fetch('/api/favorites', { query: { fp, idsOnly: 1 } })
+    favSet.value = new Set((res.ids || []) as string[])
+  } catch { /* 收藏状态拉取失败不影响列表展示 */ }
+})
+async function toggleFav(id: string) {
+  if (favBusyId.value) return
+  const fp = getFp()
+  const on = favSet.value.has(id)
+  favBusyId.value = id
+  try {
+    await $fetch(`/api/articles/${id}/favorite`, { method: 'POST', body: { fp, action: on ? 'remove' : 'add' } })
+    if (on) favSet.value.delete(id)
+    else favSet.value.add(id)
+  } catch { /* 静默失败，不打断阅读 */ }
+  finally { favBusyId.value = '' }
+}
 
 // 搜索无结果 → 提交选题（公开投稿，进素材队列，每天 8 点自动生成引流文）
 const topic = ref('')
@@ -196,9 +243,9 @@ async function submitTopic() {
         v-for="c in categories"
         :key="c"
         class="tab"
-        :class="{ active: !isSearching && active === c, empty: !(catCounts?.counts?.[c]) }"
-        :disabled="!(catCounts?.counts?.[c])"
-        :title="(catCounts?.counts?.[c]) ? '' : '该分类内容整理中'"
+        :class="{ active: !isSearching && active === c, empty: c !== '全部' && !(catCounts?.counts?.[c]) }"
+        :disabled="c !== '全部' && !(catCounts?.counts?.[c])"
+        :title="c === '全部' || (catCounts?.counts?.[c]) ? '' : '该分类内容整理中'"
         @click="switchTab(c)"
       >{{ c }}</button>
     </div>
@@ -222,13 +269,23 @@ async function submitTopic() {
             <span class="category">{{ a.category }}</span>
             <span v-if="a.updatedAt" class="date">{{ (a.updatedAt || '').slice(0, 10) }}</span>
             <span v-if="a.expiresAt" class="expire">有效期至 {{ a.expiresAt }}</span>
+            <button
+              class="star"
+              :class="{ on: favSet.has(a.id) }"
+              :disabled="!!favBusyId"
+              :aria-label="(favSet.has(a.id) ? '取消收藏' : '收藏') + '：' + a.title"
+              @click.prevent="toggleFav(a.id)"
+            >
+              <svg viewBox="0 0 24 24" :fill="favSet.has(a.id) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.9-5.2-2.7-5.2 2.7 1-5.9L3.5 9.7l5.9-.9z"/></svg>
+            </button>
           </div>
         </div>
       </NuxtLink>
 
-      <div v-if="data.hasMore" class="pager">
+      <div v-if="hasMore" class="pager">
         <button :disabled="loadMoreBusy" @click="loadMore">{{ loadMoreBusy ? '加载中…' : '加载更多' }}</button>
       </div>
+      <p v-else-if="data && data.list.length" class="list-end">已加载全部{{ isSearching ? '结果' : '内容' }}</p>
     </div>
     <div v-else class="empty">
       <template v-if="isSearching">
@@ -393,6 +450,27 @@ async function submitTopic() {
 
 /* 分页 */
 .pager { text-align: center; margin-top: 20px; }
+.list-end { text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 18px; }
+/* 列表项收藏星标 */
+.star {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  color: #9ca3af;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color .2s, background .2s, transform .15s;
+}
+.star svg { width: 15px; height: 15px; }
+.star:hover { color: #f59e0b; background: var(--accent-weak); transform: scale(1.08); }
+.star.on { color: #f59e0b; }
+.star:disabled { opacity: .5; cursor: wait; }
 .pager button {
   padding: 10px 28px;
   border-radius: 12px;

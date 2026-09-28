@@ -94,8 +94,13 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
           <button class="unfav" @click="removeFav(f.id)">取消收藏</button>
         </div>
         <NuxtLink :to="`/article/${f.id}`" class="fav-body">
-          <div class="fav-title">{{ f.title }}</div>
-          <div class="fav-summary">{{ f.summary }}</div>
+          <div v-if="f.firstImage" class="fav-thumb">
+            <img :src="f.firstImage" :alt="f.title" loading="lazy" referrerpolicy="no-referrer" />
+          </div>
+          <div class="fav-text">
+            <div class="fav-title">{{ f.title }}</div>
+            <div class="fav-summary">{{ f.summary }}</div>
+          </div>
         </NuxtLink>
       </div>
     </div>
@@ -153,7 +158,18 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
   flex-shrink: 0;
 }
 .unfav:hover { border-color: #f87171; color: #dc2626; background: #fef2f2; }
-.fav-body { display: block; text-decoration: none; }
+.fav-body { display: flex; gap: 14px; text-decoration: none; }
+.fav-thumb {
+  width: 110px;
+  height: 74px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #eef2f7;
+  align-self: center;
+}
+.fav-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fav-text { min-width: 0; flex: 1; }
 .cat {
   background: var(--primary-weak);
   color: var(--primary);
@@ -172,5 +188,8 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+@media (max-width: 600px) {
+  .fav-thumb { width: 92px; height: 64px; border-radius: 8px; }
 }
 </style>

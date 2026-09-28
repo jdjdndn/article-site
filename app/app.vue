@@ -1,3 +1,8 @@
+<script setup lang="ts">
+// 页脚分类入口与导航共用配置（单一数据源：app/config/site.ts）
+import { SITE_CATEGORIES } from './config/site'
+</script>
+
 <template>
   <div class="site">
     <header class="site-header">
@@ -32,7 +37,7 @@
         <div class="footer-col">
           <span class="footer-copy">© 2026 AI 文章站 · 优惠攻略 · 好物推荐 · 副业指南</span>
           <nav class="footer-nav">
-            <NuxtLink v-for="c in ['优惠', '攻略', '好物', '副业']" :key="c" :to="{ path: '/', query: { cat: c } }" class="footer-link">{{ c }}</NuxtLink>
+            <NuxtLink v-for="c in SITE_CATEGORIES" :key="c" :to="{ path: '/', query: { cat: c } }" class="footer-link">{{ c }}</NuxtLink>
           </nav>
         </div>
         <div class="friend-links">

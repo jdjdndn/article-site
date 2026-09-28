@@ -177,12 +177,27 @@ const reportMsg = ref('')
 const reportSending = ref(false)
 const reportDone = ref(false)
 const reportBox = ref<HTMLTextAreaElement | null>(null)
-// 打开时聚焦输入框；ESC 关闭（键盘无障碍）
+const reportPanel = ref<HTMLElement | null>(null)
+// 打开时聚焦输入框；ESC 关闭 + Tab 焦点锁定在弹窗内（键盘无障碍）
 watch(reportOpen, (v) => {
   if (v) nextTick(() => reportBox.value?.focus())
 })
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && reportOpen.value) reportOpen.value = false
+  if (e.key === 'Escape' && reportOpen.value) { reportOpen.value = false; return }
+  if (e.key === 'Tab' && reportOpen.value) {
+    const panel = reportPanel.value
+    if (!panel) return
+    const focusables = panel.querySelectorAll<HTMLElement>('button, textarea, input, a[href], [tabindex]:not([tabindex="-1"])')
+    if (!focusables.length) return
+    const first = focusables[0]
+    const last = focusables[focusables.length - 1]
+    const active = document.activeElement as HTMLElement | null
+    if (e.shiftKey) {
+      if (active === first || !panel.contains(active)) { e.preventDefault(); last.focus() }
+    } else if (active === last || !panel.contains(active)) {
+      e.preventDefault(); first.focus()
+    }
+  }
 }
 async function submitReport() {
   const content = reportText.value.trim()
@@ -341,7 +356,7 @@ useHead(() => {
       </div>
       <Transition name="pop">
       <div v-if="reportOpen" class="report-mask" @click.self="reportOpen = false">
-        <div class="report-panel" role="dialog" aria-modal="true" aria-label="纠错反馈">
+        <div ref="reportPanel" class="report-panel" role="dialog" aria-modal="true" aria-label="纠错反馈">
           <div class="report-head">
             <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5h.01"/></svg>信息有误，反馈一下</h3>
             <button class="report-x" @click="reportOpen = false" aria-label="关闭">✕</button>

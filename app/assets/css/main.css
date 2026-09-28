@@ -36,6 +36,10 @@ a { color: var(--primary); }
 img { max-width: 100%; }
 ::selection { background: rgba(37, 99, 235, .18); }
 
+/* 键盘可达性：Tab 导航可见焦点（鼠标点击不显示，避免打扰） */
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px; }
+:focus:not(:focus-visible) { outline: none; }
+
 /* 细滚动条（WebKit） */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }

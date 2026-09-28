@@ -36,15 +36,19 @@ export default defineEventHandler(async (event) => {
   }
 
   // 相关文章：related_ids 优先 → 同分类兜底
+  // related_ids 用参数绑定（drizzle 数组展开为占位符），不做字符串拼接
   let related: any[] = []
   try {
     const ids = JSON.parse(article.relatedIds || '[]')
-    if (ids.length) {
-      related = await db
-        .select({ id: articles.id, title: articles.title, summary: articles.summary })
-        .from(articles)
-        .where(and(sql`id IN (${ids.map((i: string) => `'${i}'`).join(',')})`, eq(articles.status, 'published'), sql`id != ${article.id}`))
-        .limit(6)
+    if (Array.isArray(ids) && ids.length) {
+      const idList = ids.slice(0, 6).map((i: any) => String(i)).filter(Boolean)
+      if (idList.length) {
+        related = await db
+          .select({ id: articles.id, title: articles.title, summary: articles.summary })
+          .from(articles)
+          .where(and(sql`id IN (${idList})`, eq(articles.status, 'published'), sql`id != ${article.id}`))
+          .limit(6)
+      }
     }
   } catch { /* related_ids 解析失败则走兜底 */ }
 

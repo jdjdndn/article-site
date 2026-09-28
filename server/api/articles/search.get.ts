@@ -2,16 +2,20 @@ import { defineEventHandler, getQuery, createError } from 'h3'
 import { sql } from 'drizzle-orm'
 import { useDb, ensureFts } from '../../utils/db'
 import { searchLogs } from '../../db/schema'
+import { toListItem } from '../../utils/content'
 
-// GET /api/articles/search?q=xxx&limit=20
+// GET /api/articles/search?q=xxx&page=1&limit=20
 // FTS5 全文搜索（trigram，中文子串匹配），长词走 MATCH，短词（<3 字）降级 LIKE
+// 分页：OFFSET 翻页（文章量级小，浅翻页足够；返回 hasMore + nextPage 供"加载更多"）
 // 过滤：仅 published 且未过期（排除 deleted / expired）
 // 顺带记录搜索词（search_logs，量小；cron 定期清理）
 export default defineEventHandler(async (event) => {
   const q = getQuery(event)
   const keyword = typeof q.q === 'string' ? q.q.trim() : ''
   const limit = Math.min(Number(q.limit) || 20, 50)
-  if (!keyword) return { list: [], hasMore: false }
+  const page = Math.max(1, Number(q.page) || 1)
+  const offset = (page - 1) * limit
+  if (!keyword) return { list: [], hasMore: false, nextPage: null }
   if (keyword.length > 50) throw createError({ statusCode: 400, statusMessage: '关键词过长' })
 
   const db = useDb()
@@ -36,7 +40,7 @@ export default defineEventHandler(async (event) => {
           JOIN articles a ON a.rowid = f.rowid
           WHERE ${sql.raw(base)} AND articles_fts MATCH ${'"' + safe + '"'}
           ORDER BY score
-          LIMIT ${limit}`,
+          LIMIT ${limit} OFFSET ${offset}`,
     )
     rows = res.results as any[]
   } else {
@@ -47,24 +51,14 @@ export default defineEventHandler(async (event) => {
           FROM articles a
           WHERE ${sql.raw(base)} AND (a.title LIKE ${like} OR a.summary LIKE ${like})
           ORDER BY a.updated_at DESC
-          LIMIT ${limit}`,
+          LIMIT ${limit} OFFSET ${offset}`,
     )
     rows = res.results as any[]
   }
 
   // 提取首图，content 不返回
-  const list = rows.map((r: any) => {
-    let firstImage = ''
-    try {
-      const c = typeof r.content === 'string' ? JSON.parse(r.content) : r.content
-      if (Array.isArray(c)) {
-        const b = c.find((x: any) => x?.type === 'image' && x?.url)
-        if (b?.url) firstImage = b.url
-      }
-    } catch { /* 结构异常忽略 */ }
-    const { content, ...rest } = r
-    return { ...rest, firstImage }
-  })
+  const list = rows.map((r: any) => toListItem(r))
 
-  return { list, hasMore: rows.length >= limit }
+  const hasMore = rows.length >= limit
+  return { list, hasMore, nextPage: hasMore ? page + 1 : null }
 })
