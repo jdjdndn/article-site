@@ -67,7 +67,7 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
     <div v-if="loading" class="empty">加载中…</div>
     <div v-else-if="err" class="empty">{{ err }}</div>
     <div v-else-if="!list.length" class="empty">
-      还没有收藏。去 <NuxtLink to="/" class="link">首页</NuxtLink> 逛逛，在文章里点「☆ 收藏」即可。
+      还没有收藏。去 <NuxtLink to="/" class="link">首页</NuxtLink> 逛逛，在文章里点「收藏」即可。
     </div>
 
     <div v-else class="fav-list">
@@ -83,8 +83,11 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
       <div v-for="f in filtered" :key="f.id" class="fav-item">
         <div class="fav-head">
           <span class="cat">{{ f.category || '文章' }}</span>
-          <span v-if="f.expiresAt" class="exp">⏰ {{ f.expiresAt }}</span>
-          <button class="share" @click="shareFav(f.id)">{{ sharedId === f.id ? '✓ 已复制' : '🔗 分享' }}</button>
+          <span v-if="f.expiresAt" class="exp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9.5v3.5l2.5 1.5"/><path d="M4.5 4.5 3 6M19.5 4.5 21 6"/></svg>{{ f.expiresAt }}</span>
+          <button class="share" @click="shareFav(f.id)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+            {{ sharedId === f.id ? '已复制' : '分享' }}
+          </button>
           <button class="unfav" @click="removeFav(f.id)">取消收藏</button>
         </div>
         <NuxtLink :to="`/article/${f.id}`" class="fav-body">
@@ -119,6 +122,9 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
 .fav-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .share {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border: 1px solid var(--border);
   background: #fff;
   border-radius: 999px;
@@ -129,9 +135,9 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
   transition: all .2s;
   flex-shrink: 0;
 }
+.share svg { width: 12px; height: 12px; }
 .share:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-weak); }
 .unfav {
-  margin-left: auto;
   border: 1px solid var(--border);
   background: #fff;
   border-radius: 999px;
@@ -152,7 +158,8 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
   font-size: 12px;
   font-weight: 600;
 }
-.exp { color: #d97706; font-size: 12px; }
+.exp { display: inline-flex; align-items: center; gap: 3px; color: #d97706; font-size: 12px; }
+.exp svg { width: 12px; height: 12px; }
 .fav-title { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
 .fav-summary {
   font-size: 13px;

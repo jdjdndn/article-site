@@ -29,6 +29,7 @@ export default defineEventHandler(async (event) => {
       tags: articles.tags,
       expiresAt: articles.expiresAt,
       updatedAt: articles.updatedAt,
+      content: articles.content,
     })
     .from(articles)
     .where(and(...conds))
@@ -39,5 +40,19 @@ export default defineEventHandler(async (event) => {
   const rows = hasMore ? list.slice(0, limit) : list
   const nextCursor = hasMore && rows.length ? rows[rows.length - 1].updatedAt : null
 
-  return { list: rows, nextCursor, hasMore }
+  // 提取首图（content 里第一个 image 块），供列表缩略图；content 不返回给前端
+  const withImg = rows.map((r: any) => {
+    let firstImage = ''
+    try {
+      const c = typeof r.content === 'string' ? JSON.parse(r.content) : r.content
+      if (Array.isArray(c)) {
+        const b = c.find((x: any) => x?.type === 'image' && x?.url)
+        if (b?.url) firstImage = b.url
+      }
+    } catch { /* 结构异常忽略 */ }
+    const { content, ...rest } = r
+    return { ...rest, firstImage }
+  })
+
+  return { list: withImg, nextCursor, hasMore }
 })

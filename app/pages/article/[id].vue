@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 
 const route = useRoute()
 const id = computed(() => route.params.id as string)
@@ -34,18 +34,36 @@ onMounted(() => {
     favorited.value = !!data.value?.favorited
     favoriteCount.value = data.value?.favoriteCount ?? 0
   })
-  initPlyr()
+  // Plyr 按需加载：仅当正文存在 video 块时才动态引入（避免无视频页面白拉两个 chunk）
+  const blocks: any[] = data.value?.article?.content || []
+  if (blocks.some((b: any) => b?.type === 'video')) initPlyr()
+  document.addEventListener('keydown', onKeydown)
 })
+onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
 
+// 收藏：loading + 失败可见提示
+const favBusy = ref(false)
+const favMsg = ref('')
+let favMsgTimer: ReturnType<typeof setTimeout> | null = null
 async function toggleFavorite() {
-  if (!fp.value) return
+  if (!fp.value || favBusy.value) return
+  favBusy.value = true
   const action = favorited.value ? 'remove' : 'add'
-  const res = await $fetch(`/api/articles/${id.value}/favorite`, {
-    method: 'POST',
-    body: { fp: fp.value, action },
-  })
-  favorited.value = res.favorited
-  favoriteCount.value = res.count
+  try {
+    const res = await $fetch(`/api/articles/${id.value}/favorite`, {
+      method: 'POST',
+      body: { fp: fp.value, action },
+    })
+    favorited.value = res.favorited
+    favoriteCount.value = res.count
+    favMsg.value = ''
+  } catch {
+    favMsg.value = action === 'add' ? '收藏失败，请重试' : '取消收藏失败，请重试'
+    if (favMsgTimer) clearTimeout(favMsgTimer)
+    favMsgTimer = setTimeout(() => (favMsg.value = ''), 2500)
+  } finally {
+    favBusy.value = false
+  }
 }
 
 function isAd(block: any) { return block?.type === 'ad' }
@@ -149,6 +167,15 @@ const reportOpen = ref(false)
 const reportText = ref('')
 const reportMsg = ref('')
 const reportSending = ref(false)
+const reportDone = ref(false)
+const reportBox = ref<HTMLTextAreaElement | null>(null)
+// 打开时聚焦输入框；ESC 关闭（键盘无障碍）
+watch(reportOpen, (v) => {
+  if (v) nextTick(() => reportBox.value?.focus())
+})
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && reportOpen.value) reportOpen.value = false
+}
 async function submitReport() {
   const content = reportText.value.trim()
   if (content.length < 2) { reportMsg.value = '请填写要反馈的内容（如：价格已变 / 链接失效）'; return }
@@ -161,8 +188,8 @@ async function submitReport() {
     })
     reportOpen.value = false
     reportText.value = ''
-    shareDone.value = true
-    setTimeout(() => (shareDone.value = false), 2000)
+    reportDone.value = true
+    setTimeout(() => (reportDone.value = false), 2000)
   } catch (e: any) {
     reportMsg.value = e?.data?.statusMessage || '提交失败，请重试'
   } finally {
@@ -251,7 +278,7 @@ useHead(() => {
 
     <!-- 已下架/已删除：410 兜底页 + 相关推荐（流量回收） -->
     <div v-else-if="data.status === 'gone'" class="gone card">
-      <div class="gone-icon">📭</div>
+      <div class="gone-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13h4l2 3h4l2-3h4"/><path d="M4 13V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8"/></svg></div>
       <h1>这篇文章已下架</h1>
       <p v-if="data.article.expiresAt">优惠/活动已于 {{ formatDate(data.article.expiresAt) }} 结束</p>
       <p class="gone-tip">看看其他文章吧</p>
@@ -272,16 +299,32 @@ useHead(() => {
       <h1 class="title">{{ data.article.title }}</h1>
       <p class="summary">{{ data.article.summary }}</p>
       <div class="meta">
-        <span v-if="data.article.expiresAt" class="expire">⏰ 优惠截止：{{ data.article.expiresAt }}</span>
-        <span class="published">发布于 {{ formatDate(data.article.createdAt) }}</span>
-        <span class="time">更新于 {{ formatDate(data.article.updatedAt) }}</span>
-        <button
-          class="fav-btn"
-          :class="{ on: favorited }"
-          @click="toggleFavorite"
-        >{{ favorited ? '★ 已收藏' : '☆ 收藏' }}（{{ favoriteCount }}）</button>
-        <button class="share-btn" @click="copyLink">{{ shareDone ? '✓ 已复制' : '🔗 分享' }}</button>
-        <button class="report-btn" @click="reportOpen = true">纠错</button>
+        <div class="meta-info">
+          <span v-if="data.article.expiresAt" class="expire">优惠截止：{{ data.article.expiresAt }}</span>
+          <span class="published">发布于 {{ formatDate(data.article.createdAt) }}</span>
+          <span class="time">更新于 {{ formatDate(data.article.updatedAt) }}</span>
+        </div>
+        <div class="meta-actions">
+          <button
+            class="fav-btn"
+            :class="{ on: favorited }"
+            :disabled="favBusy"
+            @click="toggleFavorite"
+          >
+            <svg v-if="favorited" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.9-5.2-2.7-5.2 2.7 1-5.9L3.5 9.7l5.9-.9z"/></svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.9-5.2-2.7-5.2 2.7 1-5.9L3.5 9.7l5.9-.9z"/></svg>
+            <span>{{ favorited ? '已收藏' : '收藏' }}（{{ favoriteCount }}）</span>
+          </button>
+          <button class="share-btn" @click="copyLink">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+            <span>{{ shareDone ? '已复制' : '分享' }}</span>
+          </button>
+          <button class="report-btn" @click="reportOpen = true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5h.01"/></svg>
+            <span>{{ reportDone ? '已提交' : '纠错' }}</span>
+          </button>
+          <span v-if="favMsg" class="fav-msg">{{ favMsg }}</span>
+        </div>
       </div>
       <Transition name="pop">
       <div v-if="reportOpen" class="report-mask" @click.self="reportOpen = false">
@@ -291,7 +334,7 @@ useHead(() => {
             <button class="report-x" @click="reportOpen = false" aria-label="关闭">✕</button>
           </div>
           <p class="report-desc">价格已变 / 链接失效 / 描述不准确，告诉我们，编辑会尽快核对修正。</p>
-          <textarea v-model="reportText" rows="3" maxlength="500" placeholder="如：价格已变化 / 链接失效 / 描述不准确…"></textarea>
+          <textarea ref="reportBox" v-model="reportText" rows="3" maxlength="500" placeholder="如：价格已变化 / 链接失效 / 描述不准确…" aria-label="反馈内容"></textarea>
           <div class="report-counter">{{ reportText.length }}/500</div>
           <p v-if="reportMsg" class="report-msg">{{ reportMsg }}</p>
           <div class="report-actions">
@@ -388,8 +431,15 @@ useHead(() => {
         <!-- 文末轻引导 -->
         <div class="read-end">
           <span>这篇对你有用吗？</span>
-          <button class="end-btn" :class="{ on: favorited }" @click="toggleFavorite">{{ favorited ? '★ 已收藏' : '☆ 收藏' }}</button>
-          <button class="end-btn" @click="copyLink">{{ shareDone ? '✓ 已复制' : '🔗 分享' }}</button>
+          <button class="end-btn" :class="{ on: favorited }" :disabled="favBusy" @click="toggleFavorite">
+            <svg v-if="favorited" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.9-5.2-2.7-5.2 2.7 1-5.9L3.5 9.7l5.9-.9z"/></svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.9-5.2-2.7-5.2 2.7 1-5.9L3.5 9.7l5.9-.9z"/></svg>
+            {{ favorited ? '已收藏' : '收藏' }}
+          </button>
+          <button class="end-btn" @click="copyLink">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+            {{ shareDone ? '已复制' : '分享' }}
+          </button>
         </div>
 
         <!-- 非 deal 模板：链接按钮放正文后 -->
@@ -469,50 +519,68 @@ useHead(() => {
 .summary { color: var(--text-muted); margin-bottom: 12px; font-size: 14px; }
 .meta {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px 12px;
   font-size: 13px;
   color: var(--text-muted);
   margin-bottom: 22px;
-  align-items: center;
 }
-.meta .time { display: inline-flex; align-items: center; gap: 4px; }
-.meta .published { display: inline-flex; align-items: center; gap: 4px; }
-.meta .published::before { content: '📅'; font-size: 11px; }
-.meta .time::before { content: '🕒'; font-size: 11px; }
+.meta-info { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.meta-actions { display: flex; align-items: center; gap: 8px; }
+.fav-msg { color: var(--danger); font-size: 12px; }
+.meta .time { display: inline-flex; align-items: center; gap: 5px; }
+.meta .published { display: inline-flex; align-items: center; gap: 5px; }
+.meta .published::before {
+  content: '';
+  width: 13px;
+  height: 13px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4.5' width='18' height='16.5' rx='3'/%3E%3Cpath d='M8 2.5v4M16 2.5v4M3 10h18'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+.meta .time::before {
+  content: '';
+  width: 13px;
+  height: 13px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E") center/contain no-repeat;
+}
 .expire {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: #d97706;
+  color: #b45309;
   background: var(--accent-weak);
   border-radius: 999px;
   padding: 3px 12px;
   font-weight: 600;
 }
-.fav-btn {
+.expire::before {
+  content: '';
+  width: 13px;
+  height: 13px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23d97706' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='13' r='8'/%3E%3Cpath d='M12 9.5v3.5l2.5 1.5'/%3E%3Cpath d='M4.5 4.5 3 6M19.5 4.5 21 6'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+.fav-btn, .share-btn, .report-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   border: 1px solid var(--border);
   background: #fff;
   border-radius: 999px;
-  padding: 4px 14px;
+  padding: 4px 13px;
   cursor: pointer;
   font-size: 12px;
   color: var(--text-muted);
   transition: all .2s;
 }
+.fav-btn svg, .share-btn svg, .report-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+.fav-btn:disabled { opacity: .6; cursor: wait; }
 .fav-btn:hover { border-color: #fbbf24; color: #d97706; }
 .fav-btn.on { background: var(--accent-weak); border-color: #fcd34d; color: #d97706; font-weight: 600; }
-.share-btn {
-  border: 1px solid var(--border);
-  background: #fff;
-  border-radius: 999px;
-  padding: 4px 14px;
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--primary);
-  transition: all .2s;
-}
+.share-btn { color: var(--primary); }
 .share-btn:hover { border-color: var(--primary); background: var(--primary-weak); }
+.report-btn:hover { border-color: #f59e0b; color: #b45309; background: #fffbeb; }
+.report-btn svg { color: var(--text-muted); }
 .copy-fail-tip {
   position: fixed;
   left: 50%;
@@ -547,7 +615,6 @@ useHead(() => {
   color: var(--text-muted);
   transition: all .2s;
 }
-.report-btn:hover { border-color: #f59e0b; color: #b45309; background: #fffbeb; }
 .report-mask {
   position: fixed;
   inset: 0;
@@ -581,7 +648,7 @@ useHead(() => {
 .report-x {
   border: none;
   background: transparent;
-  color: #9ca3af;
+  color: var(--text-muted);
   font-size: 15px;
   cursor: pointer;
   padding: 2px 6px;
@@ -603,7 +670,7 @@ useHead(() => {
   transition: border-color .2s, box-shadow .2s;
 }
 .report-panel textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
-.report-counter { text-align: right; font-size: 11px; color: #9ca3af; margin-top: 4px; }
+.report-counter { text-align: right; font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 .report-msg { color: #dc2626; font-size: 12px; margin: 6px 0 0; }
 .report-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 12px; }
 .report-cancel {
@@ -683,7 +750,8 @@ useHead(() => {
 .more-link:hover { background: #dbeafe; }
 
 .gone { text-align: center; padding: 48px 24px; margin-bottom: 22px; }
-.gone-icon { font-size: 42px; margin-bottom: 10px; }
+.gone-icon { width: 56px; height: 56px; margin: 0 auto 12px; color: var(--primary); }
+.gone-icon svg { width: 100%; height: 100%; }
 .gone h1 { font-size: 20px; margin-bottom: 8px; color: var(--text); }
 .gone p { color: var(--text-muted); font-size: 14px; margin: 4px 0; }
 .gone-tip { margin-bottom: 18px !important; }
@@ -699,7 +767,7 @@ useHead(() => {
   font-weight: 500;
 }
 
-.content { margin-bottom: 22px; padding: 24px; }
+.content { margin-bottom: 22px; padding: 24px; max-width: 760px; margin-left: auto; margin-right: auto; }
 .text-block { margin-bottom: 14px; line-height: 1.85; color: #374151; font-size: 15px; }
 .block-h2 {
   font-size: 18px;
@@ -733,15 +801,39 @@ useHead(() => {
   border: 1px solid #fecaca;
   color: #b91c1c;
 }
-.block-quote.warn::before { content: '⚠️ '; }
+.block-quote.warn::before {
+  content: '';
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b91c1c' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.5 21 20H3z'/%3E%3Cpath d='M12 10v4.5'/%3E%3Cpath d='M12 17.5h.01'/%3E%3C/svg%3E") center/contain no-repeat;
+}
 .block-quote.info {
   background: var(--primary-weak);
   border: 1px solid #bfdbfe;
   color: #1d4ed8;
 }
-.block-quote.info::before { content: '💡 '; }
+.block-quote.info::before {
+  content: '';
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231d4ed8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18h6M10 21h4'/%3E%3Cpath d='M12 3a6 6 0 0 0-3.6 10.8c.8.6 1.1 1.4 1.1 2.2h5c0-.8.3-1.6 1.1-2.2A6 6 0 0 0 12 3z'/%3E%3C/svg%3E") center/contain no-repeat;
+}
 .block-image { margin: 16px 0; }
-.block-image img { max-width: 100%; border-radius: 12px; display: block; box-shadow: var(--shadow-sm); }
+.block-image img {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 12px;
+  display: block;
+  box-shadow: var(--shadow-sm);
+  background: #eef2f7;
+}
 .block-image figcaption { font-size: 12px; color: var(--text-muted); margin-top: 6px; text-align: center; }
 .block-video { margin: 16px 0; }
 .block-video video, .block-video .plyr { width: 100%; border-radius: 12px; display: block; }
@@ -769,10 +861,15 @@ useHead(() => {
   color: var(--text); font-size: 14px;
 }
 .read-end .end-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   border: 1px solid var(--border); background: #fff; border-radius: 999px;
   padding: 5px 14px; font-size: 13px; cursor: pointer; color: var(--text-muted);
   text-decoration: none; transition: all .2s;
 }
+.read-end .end-btn svg { width: 13px; height: 13px; }
+.read-end .end-btn:disabled { opacity: .6; cursor: wait; }
 .read-end .end-btn:hover { border-color: var(--primary); color: var(--primary); }
 .read-end .end-btn.on { background: var(--primary); color: #fff; border-color: transparent; }
 
@@ -795,7 +892,7 @@ useHead(() => {
 }
 .ad-link { display: inline-block; margin-top: 6px; font-weight: 600; color: var(--primary); text-decoration: none; }
 
-.faq { margin-bottom: 22px; padding: 20px 24px; }
+.faq { margin-bottom: 22px; padding: 20px 24px; max-width: 760px; margin-left: auto; margin-right: auto; }
 .faq h2 { font-size: 17px; margin-bottom: 6px; color: var(--text); }
 .faq details {
   border-radius: 10px;
@@ -806,7 +903,13 @@ useHead(() => {
 .faq details[open] { background: #f9fafb; }
 .faq summary { cursor: pointer; font-weight: 600; color: var(--text); padding: 8px 2px; list-style: none; display: flex; align-items: center; gap: 6px; }
 .faq summary::-webkit-details-marker { display: none; }
-.faq summary::before { content: '❓'; font-size: 12px; }
+.faq summary::before {
+  content: '';
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M9.5 9.5a2.5 2.5 0 1 1 3.4 2.3c-.8.3-1.4.9-1.4 1.7'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E") center/contain no-repeat;
+}
 .faq details p { color: var(--text-muted); margin: 2px 0 10px 18px; font-size: 14px; line-height: 1.75; }
 
 .links { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
@@ -824,7 +927,7 @@ useHead(() => {
 }
 .link-btn:hover { opacity: .92; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(37, 99, 235, .34); }
 
-.related { margin-bottom: 22px; padding: 20px 24px; }
+.related { margin-bottom: 22px; padding: 20px 24px; max-width: 760px; margin-left: auto; margin-right: auto; }
 .related h2, .friend h2 { font-size: 17px; margin-bottom: 10px; color: var(--text); }
 .related-item {
   display: block;
@@ -837,7 +940,7 @@ useHead(() => {
   transition: background .2s;
 }
 .related-item:hover { background: var(--primary-weak); }
-.friend { padding: 20px 24px; }
+.friend { padding: 20px 24px; max-width: 760px; margin-left: auto; margin-right: auto; }
 .friend-links { display: flex; flex-wrap: wrap; gap: 8px; }
 .friend-links a {
   display: inline-block;
@@ -859,5 +962,7 @@ useHead(() => {
   .link-btn { width: 100%; text-align: center; }
   .related, .friend, .faq { padding: 16px; }
   .block-price { flex-wrap: wrap; }
+  .meta { flex-direction: column; align-items: flex-start; }
+  .meta-actions { width: 100%; flex-wrap: wrap; }
 }
 </style>

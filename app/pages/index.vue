@@ -47,7 +47,9 @@ useHead(() => ({
 import { SITE_CATEGORIES, SITE_BANNERS } from '../config/site'
 const categories = ref([...SITE_CATEGORIES])
 const { data: catCounts } = await useFetch('/api/categories', { key: 'cat-counts' })
-const active = ref('全部')
+// 分类状态与 URL ?cat= 双向同步（分享/刷新/搜索引擎落点保持一致）
+const catFromUrl = (route.query.cat as string) || ''
+const active = ref(categories.value.includes(catFromUrl) ? catFromUrl : '全部')
 const perPage = 20
 
 // 搜索词与 URL ?q= 同步
@@ -87,27 +89,39 @@ watch(data, (d: any) => {
 
 function switchTab(c: string) {
   // 再点已选分类 = 取消过滤，回到"全部"
-  active.value = active.value === c ? '全部' : c
+  const next = active.value === c ? '全部' : c
+  active.value = next
   kw.value = ''
   cursor.value = ''
-  router.replace({ query: { ...route.query, q: undefined } })
+  router.replace({ query: { ...route.query, cat: next === '全部' ? undefined : next, q: undefined } })
   refresh()
 }
+
+// 搜索输入防抖（350ms，输入即搜；URL ?q= 同步）
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
+watch(kw, (v) => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    if (v.trim() !== ((route.query.q as string) || '')) doSearch()
+  }, 350)
+})
 
 function doSearch() {
   const q = kw.value.trim()
-  if (q) {
-    router.replace({ query: { ...route.query, q } })
-  } else {
-    router.replace({ query: { ...route.query, q: undefined } })
-  }
+  router.replace({ query: { ...route.query, q: q || undefined, cat: undefined } })
   refresh()
 }
 
-function loadMore() {
-  if (data.value?.nextCursor) {
+// 加载更多（loading 态防重复点击）
+const loadMoreBusy = ref(false)
+async function loadMore() {
+  if (!data.value?.nextCursor || loadMoreBusy.value) return
+  loadMoreBusy.value = true
+  try {
     cursor.value = data.value.nextCursor
-    refresh()
+    await refresh()
+  } finally {
+    loadMoreBusy.value = false
   }
 }
 
@@ -115,6 +129,19 @@ watch(
   () => route.query.q,
   (v) => {
     if (v !== kw.value) kw.value = (v as string) || ''
+  },
+)
+
+// 分类与 URL 同步（浏览器前进/后退、外部 ?cat= 链接）
+watch(
+  () => route.query.cat,
+  (v) => {
+    const c = (v as string) || ''
+    if (categories.value.includes(c)) {
+      if (c !== active.value) { active.value = c; cursor.value = ''; refresh() }
+    } else if (active.value !== '全部') {
+      active.value = '全部'; cursor.value = ''; refresh()
+    }
   },
 )
 
@@ -159,8 +186,8 @@ async function submitTopic() {
     <!-- 搜索框 -->
     <div class="search-bar">
       <form @submit.prevent="doSearch">
-        <input v-model="kw" type="search" placeholder="搜索文章，如：牛奶 / 领券 / 网盘" class="search-input" />
-        <button type="submit" class="search-btn">搜索</button>
+        <input v-model="kw" type="search" placeholder="搜索文章，如：牛奶 / 领券 / 网盘" class="input search-input" />
+        <button type="submit" class="btn search-btn">搜索</button>
       </form>
     </div>
 
@@ -176,21 +203,31 @@ async function submitTopic() {
       >{{ c }}</button>
     </div>
 
-    <div v-if="status === 'pending'" class="loading">加载中…</div>
+    <div v-if="status === 'pending'" class="loading-skeleton" aria-hidden="true">
+      <div v-for="i in 4" :key="i" class="sk-item">
+        <div class="sk-thumb"></div>
+        <div class="sk-body"><div class="sk-line w60"></div><div class="sk-line w90"></div><div class="sk-line w40"></div></div>
+      </div>
+    </div>
     <div v-else-if="data && data.list.length" class="article-list">
       <p v-if="isSearching" class="search-info">「{{ kw }}」搜索结果 {{ data.list.length }} 条</p>
       <NuxtLink v-for="a in data.list" :key="a.id" :to="`/article/${a.id}`" class="card article-item">
-        <h3 class="title">{{ a.title }}</h3>
-        <p class="summary">{{ a.summary }}</p>
-        <div class="meta">
-          <span class="category">{{ a.category }}</span>
-          <span v-if="a.updatedAt" class="date">{{ (a.updatedAt || '').slice(0, 10) }}</span>
-          <span v-if="a.expiresAt" class="expire">有效期至 {{ a.expiresAt }}</span>
+        <div v-if="a.firstImage" class="thumb">
+          <img :src="a.firstImage" :alt="a.title" loading="lazy" referrerpolicy="no-referrer" />
+        </div>
+        <div class="info">
+          <h3 class="title">{{ a.title }}</h3>
+          <p class="summary">{{ a.summary }}</p>
+          <div class="meta">
+            <span class="category">{{ a.category }}</span>
+            <span v-if="a.updatedAt" class="date">{{ (a.updatedAt || '').slice(0, 10) }}</span>
+            <span v-if="a.expiresAt" class="expire">有效期至 {{ a.expiresAt }}</span>
+          </div>
         </div>
       </NuxtLink>
 
       <div v-if="data.hasMore" class="pager">
-        <button @click="loadMore">加载更多</button>
+        <button :disabled="loadMoreBusy" @click="loadMore">{{ loadMoreBusy ? '加载中…' : '加载更多' }}</button>
       </div>
     </div>
     <div v-else class="empty">
@@ -198,7 +235,7 @@ async function submitTopic() {
         <p>未找到「{{ kw }}」相关文章</p>
         <div class="topic-submit">
           <input v-model="topic" type="text" maxlength="60" placeholder="提交你想看的选题，如：XX 使用攻略" />
-          <button class="search-btn" :disabled="topicBusy || topic.trim().length < 4" @click="submitTopic">{{ topicBusy ? '提交中…' : '提交选题' }}</button>
+          <button class="btn search-btn" :disabled="topicBusy || topic.trim().length < 4" @click="submitTopic">{{ topicBusy ? '提交中…' : '提交选题' }}</button>
           <p v-if="topicMsg" class="topic-msg">{{ topicMsg }}</p>
           <p class="hint">收到后会进入自动生成队列，每天 8 点产出文章</p>
         </div>
@@ -227,34 +264,8 @@ async function submitTopic() {
 
 .search-bar { margin-bottom: 18px; }
 .search-bar form { display: flex; gap: 10px; }
-.search-input {
-  flex: 1;
-  padding: 11px 16px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  font-size: 14px;
-  font-family: inherit;
-  outline: none;
-  background: #fff;
-  color: var(--text);
-  transition: border-color .2s, box-shadow .2s;
-  box-shadow: var(--shadow-sm);
-}
-.search-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
-.search-btn {
-  padding: 11px 22px;
-  background: linear-gradient(180deg, var(--primary), var(--primary-strong));
-  color: #fff;
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, .25);
-  transition: opacity .2s, transform .15s;
-}
-.search-btn:hover { opacity: .92; }
-.search-btn:active { transform: translateY(1px); }
+.search-input { flex: 1; padding: 11px 16px; border-radius: 12px; box-shadow: var(--shadow-sm); }
+.search-btn { padding: 11px 22px; border-radius: 12px; font-weight: 500; }
 
 /* 分类 tab（分段控件：浅灰容器 + 白色选中滑块） */
 .tabs {
@@ -293,13 +304,25 @@ async function submitTopic() {
 /* 文章列表 */
 .article-list { display: flex; flex-direction: column; gap: 14px; }
 .article-item {
-  display: block;
+  display: flex;
+  gap: 14px;
   text-decoration: none;
   color: inherit;
   padding: 18px 20px;
   transition: box-shadow .25s ease, transform .25s ease;
 }
 .article-item:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.thumb {
+  width: 120px;
+  height: 82px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #eef2f7;
+  align-self: center;
+}
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.info { min-width: 0; flex: 1; }
 .search-info { font-size: 13px; color: var(--text-muted); margin-bottom: 2px; }
 .title { font-size: 16px; font-weight: 650; margin-bottom: 6px; color: var(--text); }
 .summary {
@@ -310,7 +333,7 @@ async function submitTopic() {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.meta { margin-top: 10px; display: flex; gap: 10px; font-size: 12px; align-items: center; }
+.meta { margin-top: 10px; display: flex; gap: 10px; font-size: 12px; align-items: center; flex-wrap: wrap; }
 .category {
   display: inline-block;
   padding: 2px 10px;
@@ -328,9 +351,45 @@ async function submitTopic() {
   padding: 2px 10px;
   border-radius: 999px;
 }
-.expire::before { content: '⏰'; font-size: 11px; }
-.date { color: var(--text-muted); }
-.date::before { content: '📅'; font-size: 11px; margin-right: 3px; }
+.expire::before {
+  content: '';
+  width: 11px;
+  height: 11px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23d97706' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='13' r='8'/%3E%3Cpath d='M12 9.5v3.5l2.5 1.5'/%3E%3Cpath d='M4.5 4.5 3 6M19.5 4.5 21 6'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+.date { color: var(--text-muted); display: inline-flex; align-items: center; gap: 4px; }
+.date::before {
+  content: '';
+  width: 11px;
+  height: 11px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4.5' width='18' height='16.5' rx='3'/%3E%3Cpath d='M8 2.5v4M16 2.5v4M3 10h18'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+
+/* 骨架屏 */
+.loading-skeleton { display: flex; flex-direction: column; gap: 14px; }
+.sk-item {
+  display: flex;
+  gap: 14px;
+  padding: 18px 20px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.sk-thumb {
+  width: 120px;
+  height: 82px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  align-self: center;
+  background: linear-gradient(90deg, #eef2f7 25%, #f8fafc 50%, #eef2f7 75%);
+  background-size: 200% 100%;
+  animation: sk 1.2s ease-in-out infinite;
+}
+.sk-body { flex: 1; display: flex; flex-direction: column; gap: 10px; justify-content: center; }
+.sk-line { height: 13px; border-radius: 6px; background: linear-gradient(90deg, #eef2f7 25%, #f8fafc 50%, #eef2f7 75%); background-size: 200% 100%; animation: sk 1.2s ease-in-out infinite; }
+.sk-line.w60 { width: 60%; } .sk-line.w90 { width: 90%; } .sk-line.w40 { width: 40%; }
+@keyframes sk { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
 /* 分页 */
 .pager { text-align: center; margin-top: 20px; }
@@ -365,5 +424,7 @@ async function submitTopic() {
   .tab { padding: 8px 6px; font-size: 13px; }
   .search-btn { padding: 11px 16px; }
   .article-item { padding: 15px 16px; }
+  .thumb { width: 96px; height: 68px; border-radius: 8px; }
+  .sk-thumb { width: 96px; height: 68px; }
 }
 </style>

@@ -30,7 +30,7 @@ export default defineEventHandler(async (event) => {
     // trigram 子串匹配（引号包短语，去掉可能破坏 MATCH 语法的字符）
     const safe = keyword.replace(/"/g, '')
     const res = await db.run(
-      sql`SELECT a.id, a.title, a.summary, a.category, a.expires_at, a.updated_at,
+      sql`SELECT a.id, a.title, a.summary, a.category, a.expires_at, a.updated_at, a.content,
                  bm25(articles_fts) AS score
           FROM articles_fts f
           JOIN articles a ON a.rowid = f.rowid
@@ -43,7 +43,7 @@ export default defineEventHandler(async (event) => {
     // 短词降级 LIKE（2 字中文常用词）
     const like = `%${keyword}%`
     const res = await db.run(
-      sql`SELECT a.id, a.title, a.summary, a.category, a.expires_at, a.updated_at
+      sql`SELECT a.id, a.title, a.summary, a.category, a.expires_at, a.updated_at, a.content
           FROM articles a
           WHERE ${sql.raw(base)} AND (a.title LIKE ${like} OR a.summary LIKE ${like})
           ORDER BY a.updated_at DESC
@@ -52,5 +52,19 @@ export default defineEventHandler(async (event) => {
     rows = res.results as any[]
   }
 
-  return { list: rows, hasMore: rows.length >= limit }
+  // 提取首图，content 不返回
+  const list = rows.map((r: any) => {
+    let firstImage = ''
+    try {
+      const c = typeof r.content === 'string' ? JSON.parse(r.content) : r.content
+      if (Array.isArray(c)) {
+        const b = c.find((x: any) => x?.type === 'image' && x?.url)
+        if (b?.url) firstImage = b.url
+      }
+    } catch { /* 结构异常忽略 */ }
+    const { content, ...rest } = r
+    return { ...rest, firstImage }
+  })
+
+  return { list, hasMore: rows.length >= limit }
 })
