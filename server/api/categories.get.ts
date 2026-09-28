@@ -10,6 +10,7 @@ export default defineEventHandler(async (event) => {
   const res = await db.run(sql`
     SELECT category, count(*) AS n FROM articles
     WHERE status = 'published'
+      AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
     GROUP BY category ORDER BY n DESC`)
   const counts = (res.results || []) as { category: string; n: number }[]
   const map: Record<string, number> = {}

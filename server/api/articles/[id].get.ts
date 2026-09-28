@@ -46,7 +46,12 @@ export default defineEventHandler(async (event) => {
         related = await db
           .select({ id: articles.id, title: articles.title, summary: articles.summary })
           .from(articles)
-          .where(and(sql`id IN (${idList})`, eq(articles.status, 'published'), sql`id != ${article.id}`))
+          .where(and(
+            sql`id IN (${idList})`,
+            eq(articles.status, 'published'),
+            sql`id != ${article.id}`,
+            sql`(expires_at IS NULL OR datetime(expires_at) > datetime('now'))`,
+          ))
           .limit(6)
       }
     }
@@ -56,7 +61,12 @@ export default defineEventHandler(async (event) => {
     related = await db
       .select({ id: articles.id, title: articles.title, summary: articles.summary })
       .from(articles)
-      .where(and(eq(articles.category, article.category), eq(articles.status, 'published'), sql`id != ${article.id}`))
+      .where(and(
+        eq(articles.category, article.category),
+        eq(articles.status, 'published'),
+        sql`id != ${article.id}`,
+        sql`(expires_at IS NULL OR datetime(expires_at) > datetime('now'))`,
+      ))
       .orderBy(desc(articles.updatedAt))
       .limit(6)
   }
