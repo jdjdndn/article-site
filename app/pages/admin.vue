@@ -453,10 +453,15 @@ const seedStatus = ref('all')
 const seedRaw = ref('')
 const seedBusy = ref(false)
 const seedTotal = ref(0)
+const seedPendingTotal = ref(0)
 async function loadSeeds() {
-  const res = await api('/api/admin/seeds', { query: { status: seedStatus.value, page: seedPage.value, size: 30 } })
+  const [res, p] = await Promise.all([
+    api('/api/admin/seeds', { query: { status: seedStatus.value, page: seedPage.value, size: 30 } }),
+    api('/api/admin/seeds', { query: { status: 'pending', page: 1, size: 1 } }),
+  ])
   seeds.value = res.list || []
   seedTotal.value = res.total || 0
+  seedPendingTotal.value = p.total || 0
 }
 async function addSeeds() {
   const parts = splitRaw(seedRaw.value)
@@ -943,7 +948,7 @@ if (key.value) loadList()
             <option value="failed">失败</option>
             <option value="done">已完成</option>
           </select>
-          <span class="hint">共 {{ seedTotal }} 条</span>
+          <span class="hint">共 {{ seedTotal }} 条<template v-if="seedPendingTotal > 0"> · 待处理 {{ seedPendingTotal }} 条 · 预计 {{ Math.ceil(seedPendingTotal / 3) }} 天消化完</template></span>
         </div>
         <div v-if="!seeds.length" class="empty">暂无素材</div>
         <table v-else class="tbl">

@@ -1,4 +1,4 @@
-import { and, eq, gte, ne } from 'drizzle-orm'
+import { and, eq, gte, ne, sql } from 'drizzle-orm'
 import { useDb } from './db'
 import { articles, runLogs } from '../db/schema'
 import { useRuntimeConfig } from '#imports'
@@ -76,10 +76,11 @@ function aiSuggestPrompt() {
 请基于下面的时间背景，策划 3 个贴合近期时间、读者愿意看的引流文选题：
 时间背景：${dateContext()}
 要求：
-1) 紧扣近期时令/节日/热点，选题带时间感（如"国庆出行前""秋季换季"），但不要承诺具体优惠截止时间；
-2) 合法合规：不涉及医疗功效、金融理财收益、赌博、违禁品、运营商号卡套餐等高风险品类；
-3) 每篇有明确干货角度（读者能学到什么），并提示软文挂载点（正文哪个位置可自然放第三方推广链接）；
-4) 只输出一个 JSON 数组（不要多余文字、不要 markdown 代码块），每个元素：
+1) 紧扣近期时令/节日/热点，但标题**避免"即将/马上/倒计时/XX前/XX后"等强时效词**，写成过三个月再读依然成立的话题（如把"国庆出行前"写成"出行行李收纳"）；也不要承诺具体优惠截止时间；
+2) **3 个选题必须分属 3 个不同 category**（优惠/攻略/好物/副业各用一次），避免同一天主题同质化；
+3) 合法合规：不涉及医疗功效、金融理财收益、赌博、违禁品、运营商号卡套餐等高风险品类；
+4) 每篇有明确干货角度（读者能学到什么），并提示软文挂载点（正文哪个位置可自然放第三方推广链接）；
+5) 只输出一个 JSON 数组（不要多余文字、不要 markdown 代码块），每个元素：
 {"title":"选题标题(≤18字)","angle":"干货角度+软文挂载点提示(60-120字)","category":"优惠/攻略/好物/副业之一"}`
 }
 
@@ -94,18 +95,27 @@ function extractJson(text: string): any {
   return null
 }
 
+// 云端 AI 服务不可用（额度/模型类错误）：本轮窗口放弃，不再空转重试
+class AiFatalError extends Error {}
+
 async function aiChat(messages: { role: string; content: string }[]): Promise<string> {
   const ai: any = (process.env as any).AI
-  if (!ai) throw new Error('AI binding 未配置（云端兜底需在 wrangler.jsonc 配置 Workers AI binding）')
-  const out: any = await ai.run(MODEL, { messages, max_tokens: 4096 })
-  return String(out?.response ?? out?.text ?? '')
+  if (!ai) throw new AiFatalError('AI binding 未配置（云端兜底需在 wrangler.jsonc 配置 Workers AI binding）')
+  try {
+    const out: any = await ai.run(MODEL, { messages, max_tokens: 4096 })
+    return String(out?.response ?? out?.text ?? '')
+  } catch (e: any) {
+    const m = String(e?.message || e || '')
+    if (/limit|quota|429|not\s*\.?\s*found|model|AI|credit/i.test(m)) throw new AiFatalError(m)
+    throw e
+  }
 }
 
 async function apiFetch(pathname: string, opts: any = {}) {
   const cfg: any = useRuntimeConfig()
   const key = cfg.manageKey || ''
   const url = pathname.includes('?') ? `${SITE}${pathname}&key=${key}` : `${SITE}${pathname}?key=${key}`
-  const res = await fetch(url, opts)
+  const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(30000) })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(`API HTTP ${res.status}: ${JSON.stringify(data).slice(0, 200)}`)
   return data
@@ -135,6 +145,19 @@ async function hasLocalRunToday(): Promise<boolean> {
     .select({ id: runLogs.id, ok: runLogs.ok })
     .from(runLogs)
     .where(and(ne(runLogs.model, MODEL), gte(runLogs.ok, 1), gte(runLogs.runAt, from)))
+    .limit(1)
+  return rows.length > 0
+}
+
+// 今天是否已标记"云端 AI 服务不可用"（额度/模型故障 → 窗口剩余轮次跳过，避免空转）
+async function hasAiDownToday(): Promise<boolean> {
+  const db = useDb()
+  const todayCN = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10)
+  const from = todayCN + 'T00:00:00.000Z'
+  const rows = await db
+    .select({ id: runLogs.id })
+    .from(runLogs)
+    .where(and(sql`${runLogs.error} LIKE '%[ai-down]%'`, gte(runLogs.runAt, from)))
     .limit(1)
   return rows.length > 0
 }
@@ -172,6 +195,11 @@ export async function runDailyGenerate(opts: { forceWindow?: boolean } = {}) {
       log('今天已有本地流水线成功记录，云端信任本地，跳过')
       return { skipped: 'local-run' }
     }
+    // 额度/模型故障标记 → 放弃窗口剩余轮次，避免每 5 分钟空转
+    if (await hasAiDownToday()) {
+      log('今天已标记云端 AI 服务不可用，跳过')
+      return { skipped: 'ai-down' }
+    }
   }
   log(`当天已发布 ${done}/${TARGET} 篇，开始兜底（模型 ${MODEL}）`)
   let { list } = await apiFetch('/api/admin/seeds?status=pending&size=10')
@@ -193,6 +221,18 @@ export async function runDailyGenerate(opts: { forceWindow?: boolean } = {}) {
         list = again.list || []
       }
     } catch (e: any) {
+      if (e instanceof AiFatalError) {
+        const msg = `[ai-down] 云端 AI 选题失败（${e.message}），当天窗口放弃`
+        try {
+          await apiFetch('/api/admin/run-logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ runAt: new Date().toISOString(), model: MODEL, dryRun: false, total: 0, ok: 0, fail: 1, error: msg.slice(0, 200) }),
+          })
+        } catch { /* noop */ }
+        log(msg)
+        return { skipped: 'ai-down' }
+      }
       log('AI 选题失败：', e.message)
     }
   }
@@ -255,6 +295,20 @@ export async function runDailyGenerate(opts: { forceWindow?: boolean } = {}) {
   }))
   const ok = results.filter((x) => x.status === 'fulfilled').length
   const fail = results.length - ok
+  // 额度/模型故障：全部失败且均为致命错误 → 标记 [ai-down]，窗口剩余轮次跳过
+  const fatal = results.length > 0 && results.every((x) => x.status === 'rejected' && x.reason instanceof AiFatalError)
+  if (fatal) {
+    const msg = `[ai-down] 云端 AI 服务不可用（${(results[0] as any)?.reason?.message || ''}），当天窗口放弃`
+    try {
+      await apiFetch('/api/admin/run-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runAt: new Date().toISOString(), model: MODEL, dryRun: false, total: results.length, ok: 0, fail: results.length, error: msg.slice(0, 200) }),
+      })
+    } catch { /* noop */ }
+    log(msg)
+    return { skipped: 'ai-down', fail: results.length }
+  }
   try {
     await apiFetch('/api/admin/run-logs', {
       method: 'POST',

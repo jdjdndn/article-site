@@ -1,7 +1,7 @@
 import { defineNitroPlugin } from 'nitropack/runtime/plugin'
 import { and, eq, lte, sql } from 'drizzle-orm'
 import { useDb } from '../utils/db'
-import { articles, clickLogs, searchLogs } from '../db/schema'
+import { articles, clickLogs, searchLogs, runLogs } from '../db/schema'
 
 // Cloudflare Cron Trigger（*/5 * * * *）每 5 分钟触发 scheduled 事件：
 // 1) 到期的定时文章（draft + publish_at <= now）→ published
@@ -20,8 +20,9 @@ export default defineNitroPlugin((nitroApp) => {
       await db.update(articles)
         .set({ status: 'expired', updatedAt: now })
         .where(and(eq(articles.status, 'published'), lte(articles.expiresAt, now)))
-      await db.delete(clickLogs).where(sql`created_at < datetime('now', '-90 days')`)
-      await db.delete(searchLogs).where(sql`created_at < datetime('now', '-90 days')`)
+      await db.delete(clickLogs).where(sql`datetime(created_at) < datetime('now', '-90 days')`)
+      await db.delete(searchLogs).where(sql`datetime(created_at) < datetime('now', '-90 days')`)
+      await db.delete(runLogs).where(sql`datetime(run_at) < datetime('now', '-90 days')`)
     } catch (err) {
       console.error('[scheduled-publish] error:', err)
     }
