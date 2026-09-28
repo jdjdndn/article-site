@@ -218,6 +218,16 @@ async function main() {
     await reportRun({ runAt: runStarted, total: 0, ok: 0, fail: 0, error: msg.slice(0, 200) })
     return
   }
+  // 防重：当天已发满 TARGET 篇则跳过（"开机补跑"幂等，避免与 8 点任务重复发）
+  const todayCN = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10)
+  const dayRes = await apiFetch(`/api/admin/articles?status=published&from=${todayCN}&limit=100`)
+  const publishedToday = (dayRes.list || []).length
+  if (publishedToday >= TARGET) {
+    log(`[skip] 今天（${todayCN}）已发布 ${publishedToday} 篇，跳过本次`)
+    await reportRun({ runAt: runStarted, total: 0, ok: 0, fail: 0, error: `当天已发布 ${publishedToday} 篇，跳过` })
+    return
+  }
+  log(`[auto] 今天（${todayCN}）已发布 ${publishedToday}/${TARGET} 篇，继续生成`)
   let { list } = await apiFetch('/api/admin/seeds?status=pending&size=10')
   const have = list?.length || 0
   const need = TARGET - have
