@@ -81,6 +81,33 @@ function dateContext() {
   return `今天是 ${y} 年 ${m} 月 ${d} 日。近 45 天的重要节日/节气：${upcoming.join('、') || '无'}。当前时令话题（${m} 月）：${seas}。`
 }
 
+// —— 网关调用（带慢启动重试：本地网关刚拉起/浏览器繁忙时避免一次失败就中断） ——
+async function callChat(payload) {
+  const delays = [15000, 30000]
+  let lastErr = null
+  for (let i = 0; i < 3; i++) {
+    if (i > 0) {
+      log(`[网关] 第 ${i + 1} 次重试（等 ${Math.round(delays[i - 1] / 1000)}s）…`)
+      await new Promise((r) => setTimeout(r, delays[i - 1]))
+    }
+    try {
+      const res = await fetch(`${TFG}/chat/completions`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(180000),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) throw new Error(`AI 网关 HTTP ${res.status}`)
+      const data = await res.json()
+      return data?.choices?.[0]?.message?.content || ''
+    } catch (e) {
+      lastErr = e
+      log(`[网关] 第 ${i + 1} 次失败：${e.message}`)
+    }
+  }
+  throw lastErr || new Error('AI 网关调用失败')
+}
+
 // —— AI 自动选题（素材池不足时补足；选题贴合近期日期，合规可落地） ——
 function aiSuggestPrompt() {
   return `你是中文内容选题策划。站点定位：省钱/好物/攻略/副业类引流文——干货主体 + 自然软文链接，不做硬广，文章不写具体优惠截止时间。
@@ -96,22 +123,14 @@ function aiSuggestPrompt() {
 
 // 空素材池时：AI 自动出选题 → 入素材池(source='ai') → 复用生成流程
 async function aiSuggestTopics() {
-  const res = await fetch(`${TFG}/chat/completions`, {
-    method: 'POST',
-    signal: AbortSignal.timeout(180000),
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: aiSuggestPrompt() },
-        { role: 'user', content: '请输出 3 个选题 JSON 数组。' },
-      ],
-      stream: false,
-    }),
+  const text = await callChat({
+    model,
+    messages: [
+      { role: 'system', content: aiSuggestPrompt() },
+      { role: 'user', content: '请输出 3 个选题 JSON 数组。' },
+    ],
+    stream: false,
   })
-  if (!res.ok) throw new Error(`AI 网关 HTTP ${res.status}`)
-  const data = await res.json()
-  const text = data?.choices?.[0]?.message?.content || ''
   const parsed = extractJson(text)
   if (!parsed) throw new Error('AI 选题返回无法解析为 JSON')
   let arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.topics) ? parsed.topics : null)
@@ -146,22 +165,14 @@ function extractJson(text) {
   return null
 }
 async function aiGenerate(raw) {
-  const res = await fetch(`${TFG}/chat/completions`, {
-    method: 'POST',
-    signal: AbortSignal.timeout(180000),
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: aiSystemPrompt() },
-        { role: 'user', content: `原始信息：\n${JSON.stringify(raw, null, 2)}` },
-      ],
-      stream: false,
-    }),
+  const text = await callChat({
+    model,
+    messages: [
+      { role: 'system', content: aiSystemPrompt() },
+      { role: 'user', content: `原始信息：\n${JSON.stringify(raw, null, 2)}` },
+    ],
+    stream: false,
   })
-  if (!res.ok) throw new Error(`AI 网关 HTTP ${res.status}`)
-  const data = await res.json()
-  const text = data?.choices?.[0]?.message?.content || ''
   const parsed = extractJson(text)
   if (!parsed) throw new Error('AI 返回无法解析为 JSON')
   return parsed
@@ -197,6 +208,16 @@ async function reportRun(payload) {
 const TARGET = 3 // 每轮目标篇数：素材不足时由 AI 选题补足
 async function main() {
   const runStarted = new Date().toISOString()
+  // 预检：本地 AI 网关必须在线（选题与正文生成都依赖它）；不在线直接明确失败并上报
+  try {
+    const probe = await fetch(`${TFG}/models`, { signal: AbortSignal.timeout(8000) })
+    if (!probe.ok) throw new Error(`HTTP ${probe.status}`)
+  } catch (e) {
+    const msg = `本地 AI 网关(localhost:3456)未在线（${e.message}）：请先启动网关（需 Chrome 登录态）再执行`
+    log('[fatal] ' + msg)
+    await reportRun({ runAt: runStarted, total: 0, ok: 0, fail: 0, error: msg.slice(0, 200) })
+    return
+  }
   let { list } = await apiFetch('/api/admin/seeds?status=pending&size=10')
   const have = list?.length || 0
   const need = TARGET - have
