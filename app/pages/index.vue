@@ -52,11 +52,11 @@ const catFromUrl = (route.query.cat as string) || ''
 const active = ref(categories.value.includes(catFromUrl) ? catFromUrl : '全部')
 const perPage = 20
 
-// 搜索词与 URL ?q= 同步
+// 搜索词与 URL ?q= 同步；搜索翻页页码写 ?page=（刷新/分享保留页码）
 const kw = ref((route.query.q as string) || '')
 const isSearching = computed(() => !!kw.value)
 const cursor = ref('')
-const searchPage = ref(1)
+const searchPage = ref(isSearching.value ? Math.max(1, Number(route.query.page) || 1) : 1)
 
 // 列表数据：搜索态走 /api/articles/search（OFFSET 翻页），否则 /api/articles（游标分页）
 const { data, status, refresh } = await useFetch(isSearching.value ? '/api/articles/search' : '/api/articles', {
@@ -67,25 +67,28 @@ const { data, status, refresh } = await useFetch(isSearching.value ? '/api/artic
   key: computed(() => (isSearching.value ? `search-${kw.value}-${searchPage.value}` : `list-${active.value}-${cursor.value}`)),
 })
 
-// GEO：文章列表 ItemList 结构化（列表有数据时注入）
-watch(data, (d: any) => {
-  const list = d?.list || []
-  if (!list.length) return
-  const itemList = {
-    '@context': 'https://schema.org',
-    '@type': 'ItemList',
-    name: 'AI 文章站' + (active.value === '全部' ? '' : ' - ' + active.value),
-    numberOfItems: list.length,
-    itemListElement: list.map((a: any, i: number) => ({
-      '@type': 'ListItem',
-      position: i + 1,
-      url: `https://www.wcbblll.cc/article/${a.id}`,
-      name: a.title,
-    })),
+// GEO：文章列表 ItemList 结构化（SSR 直接输出，搜索引擎/AI 爬虫抓取 HTML 即可见；
+// 用 useHead 函数形式响应 data 变化，替代原 watch 客户端注入）
+useHead(() => {
+  const list = data.value?.list || []
+  if (!list.length) return {}
+  return {
+    script: [{
+      type: 'application/ld+json',
+      innerHTML: JSON.stringify([{
+        '@context': 'https://schema.org',
+        '@type': 'ItemList',
+        name: 'AI 文章站' + (active.value === '全部' ? '' : ' - ' + active.value),
+        numberOfItems: list.length,
+        itemListElement: list.map((a: any, i: number) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          url: `https://www.wcbblll.cc/article/${a.id}`,
+          name: a.title,
+        })),
+      }]),
+    }],
   }
-  useHead({
-    script: [{ type: 'application/ld+json', innerHTML: JSON.stringify([itemList]) }],
-  })
 })
 
 function switchTab(c: string) {
@@ -94,7 +97,7 @@ function switchTab(c: string) {
   kw.value = ''
   cursor.value = ''
   searchPage.value = 1
-  router.replace({ query: { ...route.query, cat: c === '全部' ? undefined : c, q: undefined } })
+  router.replace({ query: { ...route.query, cat: c === '全部' ? undefined : c, q: undefined, page: undefined } })
   refresh()
 }
 
@@ -110,11 +113,11 @@ watch(kw, (v) => {
 function doSearch() {
   const q = kw.value.trim()
   searchPage.value = 1
-  router.replace({ query: { ...route.query, q: q || undefined, cat: undefined } })
+  router.replace({ query: { ...route.query, q: q || undefined, cat: undefined, page: q ? 1 : undefined } })
   refresh()
 }
 
-// 加载更多：搜索态走 OFFSET 翻页，列表态走游标；loading 态防重复点击
+// 加载更多：搜索态走 OFFSET 翻页（页码写 URL ?page=），列表态走游标；loading 态防重复点击
 const loadMoreBusy = ref(false)
 async function loadMore() {
   if (loadMoreBusy.value) return
@@ -124,6 +127,7 @@ async function loadMore() {
     try {
       searchPage.value = (data.value?.nextPage || searchPage.value + 1)
       await refresh()
+      router.replace({ query: { ...route.query, page: searchPage.value } })
     } finally {
       loadMoreBusy.value = false
     }
@@ -145,6 +149,16 @@ watch(
   () => route.query.q,
   (v) => {
     if (v !== kw.value) kw.value = (v as string) || ''
+  },
+)
+
+// 搜索页码与 URL 同步（浏览器前进/后退、外部 ?q=&page= 链接直达第 N 页）
+watch(
+  () => route.query.page,
+  (v) => {
+    if (!isSearching.value) return
+    const p = Math.max(1, Number(v) || 1)
+    if (p !== searchPage.value) { searchPage.value = p; refresh() }
   },
 )
 
@@ -259,7 +273,7 @@ async function submitTopic() {
           <p class="summary">{{ a.summary }}</p>
           <div class="meta">
             <span class="category">{{ a.category }}</span>
-            <span v-if="a.updatedAt" class="date">{{ (a.updatedAt || '').slice(0, 10) }}</span>
+            <span v-if="a.updatedAt" class="date">{{ fmtCN(a.updatedAt) }}</span>
             <span v-if="a.expiresAt" class="expire">有效期至 {{ a.expiresAt }}</span>
             <button
               class="star"

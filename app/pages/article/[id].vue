@@ -94,14 +94,8 @@ const tmpl = computed(() => {
   return ['deal', 'guide', 'faq'].includes(t) ? t : 'default'
 })
 
-// 显示层：更新时间格式化为 YYYY-MM-DD HH:mm
-function formatDate(v: string) {
-  if (!v) return ''
-  const d = new Date(v)
-  if (Number.isNaN(d.getTime())) return v
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
-}
+// 显示层：时间统一北京时间（fmtCN 固定 UTC+8，SSR/CSR 一致；纯日期字符串原样显示）
+function formatDate(v: string) { return fmtCN(v, true) }
 
 // 链接分组：coupon/buy 主按钮常显，more 收进"更多"折叠
 const mainLinks = computed(() => (data.value?.article?.links || []).filter((l: any) => l.kind !== 'more'))
@@ -238,6 +232,7 @@ useHead(() => {
     headline: a.title,
     description: a.summary,
     url,
+    image: 'https://www.wcbblll.cc/og-cover.png',
     inLanguage: 'zh-CN',
     mainEntityOfPage: { '@type': 'WebPage', '@id': url },
     datePublished: a.createdAt,
@@ -388,7 +383,7 @@ useHead(() => {
             :key="'m' + (l.id ?? i)"
             :href="l.url"
             target="_blank"
-            rel="noopener nofollow sponsored"
+            rel="noopener nofollow sponsored noreferrer"
             class="link-btn"
             @click="trackClick(l)"
           >{{ l.label }}</a>
@@ -400,7 +395,7 @@ useHead(() => {
                 :key="'x' + (l.id ?? i)"
                 :href="l.url"
                 target="_blank"
-                rel="noopener nofollow sponsored"
+                rel="noopener nofollow sponsored noreferrer"
                 class="more-link"
                 @click="trackClick(l)"
               >{{ l.label }}</a>
@@ -420,7 +415,7 @@ useHead(() => {
           <div v-if="isAd(block)" class="ad-block">
             <span class="ad-label">{{ block.label || '广告' }}</span>
             <p>{{ block.text }}</p>
-            <a v-if="block.link" :href="block.link" target="_blank" rel="noopener nofollow sponsored" class="ad-link">去看看 →</a>
+            <a v-if="block.link" :href="block.link" target="_blank" rel="noopener nofollow sponsored noreferrer" class="ad-link">去看看 →</a>
           </div>
           <h2 v-else-if="isH2(block)" class="block-h2">{{ block.text }}</h2>
           <div v-else-if="isList(block)" class="block-list">
@@ -445,7 +440,7 @@ useHead(() => {
               controls
               playsinline
             ></video>
-            <a v-else :href="block.url" target="_blank" rel="noopener nofollow sponsored" class="video-card">
+            <a v-else :href="block.url" target="_blank" rel="noopener nofollow sponsored noreferrer" class="video-card">
               <span class="video-play">▶</span>
               <span class="video-info">
                 <span class="video-title">{{ block.title || '视频' }}</span>
@@ -479,7 +474,7 @@ useHead(() => {
             :key="'m' + (l.id ?? i)"
             :href="l.url"
             target="_blank"
-            rel="noopener nofollow sponsored"
+            rel="noopener nofollow sponsored noreferrer"
             class="link-btn"
             @click="trackClick(l)"
           >{{ l.label }}</a>
@@ -491,7 +486,7 @@ useHead(() => {
                 :key="'x' + (l.id ?? i)"
                 :href="l.url"
                 target="_blank"
-                rel="noopener nofollow sponsored"
+                rel="noopener nofollow sponsored noreferrer"
                 class="more-link"
                 @click="trackClick(l)"
               >{{ l.label }}</a>

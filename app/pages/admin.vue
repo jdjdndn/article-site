@@ -629,7 +629,7 @@ if (key.value) loadList()
           </label>
           <label>分类
             <select v-model="batchCategory">
-              <option>优惠</option><option>攻略</option><option>好物</option><option>副业</option><option>其他</option>
+              <option>优惠</option><option>攻略</option><option>好物</option><option>副业</option>
             </select>
           </label>
           <label>定时发布（可选，填了未来时间自动进草稿，到点 cron 发布）
@@ -701,7 +701,7 @@ if (key.value) loadList()
           <label>分类
             <select v-model="form.category">
               <option v-for="c in SITE_CATEGORIES" :key="c" :value="c">{{ c }}</option>
-              <option value="其他">其他</option>
+
             </select>
           </label>
           <label>模板
@@ -859,11 +859,11 @@ if (key.value) loadList()
               <td>
                 <span class="badge" :class="a.status">{{ a.status }}</span>
                 <span v-if="a.needsReview" class="badge review">待审</span>
-                <span v-if="a.status === 'draft' && a.publishAt" class="badge scheduled">⏱ {{ a.publishAt.slice(0, 16).replace('T', ' ') }}</span>
+                <span v-if="a.status === 'draft' && a.publishAt" class="badge scheduled">⏱ {{ fmtCN(a.publishAt, true) }}</span>
               </td>
               <td class="click-n">{{ a.clicks ?? 0 }}</td>
               <td class="muted">{{ a.expiresAt || '—' }}</td>
-              <td class="muted">{{ a.updatedAt?.slice(0, 10) }}</td>
+              <td class="muted">{{ fmtCN(a.updatedAt) }}</td>
               <td>
                 <button class="mini" @click="openEdit(a)">编辑</button>
                 <button class="mini danger" @click="softDelete(a)">删除</button>
@@ -892,7 +892,7 @@ if (key.value) loadList()
               </td>
               <td>{{ a.category }}</td>
               <td><span class="badge" :class="a.status">{{ a.status }}</span></td>
-              <td class="muted">{{ a.updatedAt?.slice(0, 10) }}</td>
+              <td class="muted">{{ fmtCN(a.updatedAt) }}</td>
               <td>
                 <button class="mini" @click="approve(a, 'published')">通过并发布</button>
                 <button class="mini" @click="approve(a, 'draft')">通过留草稿</button>
@@ -977,12 +977,12 @@ if (key.value) loadList()
             <tr v-for="s in seeds" :key="s.id">
               <td class="title-cell">
                 {{ s.raw.slice(0, 70) }}{{ s.raw.length > 70 ? '…' : '' }}
-                <div class="id"><span v-if="s.source === 'user'" class="badge seed-user">用户投稿</span><span v-else-if="s.source === 'ai'" class="badge seed-ai">AI 选题</span> #{{ s.id }} · {{ s.createdAt?.slice(0, 16).replace('T', ' ') }}</div>
+                <div class="id"><span v-if="s.source === 'user'" class="badge seed-user">用户投稿</span><span v-else-if="s.source === 'ai'" class="badge seed-ai">AI 选题</span> #{{ s.id }} · {{ fmtCN(s.createdAt, true) }}</div>
                 <div v-if="s.error" class="id err">{{ s.error }}</div>
               </td>
               <td class="muted">{{ s.category }} / {{ s.template }}</td>
               <td><span class="badge" :class="'seed-' + s.status">{{ s.status }}</span></td>
-              <td class="muted">{{ s.publishAt?.slice(0, 16).replace('T', ' ') || '—' }} / {{ s.expiresAt || '—' }}</td>
+              <td class="muted">{{ fmtCN(s.publishAt, true) || '—' }} / {{ s.expiresAt || '—' }}</td>
               <td>
                 <NuxtLink v-if="s.articleId" :to="`/article/${s.articleId}`" target="_blank" class="mini">查看文章</NuxtLink>
                 <button v-if="s.status === 'failed'" class="mini" @click="retrySeed(s)">重试</button>
@@ -1120,7 +1120,7 @@ if (key.value) loadList()
               <NuxtLink :to="`/article/${r.articleId}`" target="_blank" class="report-aid">{{ r.articleId }}</NuxtLink>
               <div class="report-text">{{ r.content }}</div>
               <div class="report-foot">
-                <span class="rank-n">{{ r.createdAt?.slice(0, 16).replace('T', ' ') }}</span>
+                <span class="rank-n">{{ fmtCN(r.createdAt, true) }}</span>
                 <button class="mini primary" @click="markReportDone(r)">已处理</button>
               </div>
             </div>
@@ -1153,7 +1153,7 @@ if (key.value) loadList()
                 <div class="id">{{ a.id }}</div>
               </td>
               <td>{{ a.category }}</td>
-              <td class="muted">{{ a.updatedAt?.slice(0, 10) }}</td>
+              <td class="muted">{{ fmtCN(a.updatedAt) }}</td>
               <td>
                 <button class="mini" @click="restore(a)">恢复</button>
                 <button class="mini danger" @click="hardDelete(a)">永久删除</button>
@@ -1330,4 +1330,9 @@ a.rank-title:hover { color: var(--primary); }
   .toolbar { flex-direction: column; align-items: stretch; }
   .row { flex-direction: column; gap: 0; }
 }
+
+/* 窄屏表格横向滚动（仅内容超出时出现滚动条，无副作用） */
+.card { overflow-x: auto; }
+.tbl { min-width: 760px; }
+.tbl.small { min-width: 560px; }
 </style>

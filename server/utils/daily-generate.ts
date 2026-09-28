@@ -184,6 +184,7 @@ async function cleanupOldLogs() {
   await db.run(sql`DELETE FROM search_logs WHERE created_at < datetime('now', '-90 days')`)
   await db.run(sql`DELETE FROM run_logs WHERE run_at < datetime('now', '-90 days')`)
   await db.run(sql`DELETE FROM reports WHERE created_at < datetime('now', '-90 days') AND status = 'done'`)
+  await db.run(sql`DELETE FROM rate_limits WHERE datetime(reset_at) < datetime('now')`)
 }
 
 export async function runDailyGenerate(opts: { forceWindow?: boolean } = {}) {

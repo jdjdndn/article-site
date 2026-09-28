@@ -136,3 +136,15 @@ export const runLogs = sqliteTable('run_logs', {
 ])
 
 export type RunLog = typeof runLogs.$inferSelect
+
+// 通用限频计数表（IP/设备维度滑动窗口；reset_at 过期自动重置 + cron 清理）
+// 用于 submit-topic / report 等公开写接口的 IP 兜底（fp 可伪造，IP 维度防批量刷）
+export const rateLimits = sqliteTable('rate_limits', {
+  key: text('key').primaryKey(),           // 如 ip:1.2.3.4:submit-topic
+  n: integer('n').notNull().default(0),    // 窗口内计数
+  resetAt: text('reset_at').notNull(),     // 窗口结束时间（ISO），过期后下一次命中自动重置
+}, (t) => [
+  index('idx_rate_limits_reset').on(t.resetAt),
+])
+
+export type RateLimit = typeof rateLimits.$inferSelect

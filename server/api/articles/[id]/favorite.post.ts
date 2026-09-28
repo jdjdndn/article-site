@@ -1,5 +1,5 @@
 import { defineEventHandler, getRouterParam, readBody, createError } from 'h3'
-import { eq, and, gte, sql } from 'drizzle-orm'
+import { eq, and, sql } from 'drizzle-orm'
 import { useDb } from '../../../utils/db'
 import { favorites, articles } from '../../../db/schema'
 
@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
     const [recentAdd] = await db
       .select({ n: sql<number>`count(*)` })
       .from(favorites)
-      .where(and(eq(favorites.deviceFp, fp), gte(favorites.createdAt, sql`datetime('now', '-5 minutes')`)))
+      .where(and(eq(favorites.deviceFp, fp), sql`datetime(created_at) >= datetime('now', '-5 minutes')`))
     if ((recentAdd?.n ?? 0) >= 20) throw createError({ statusCode: 429, statusMessage: '操作太频繁，请稍后再试' })
     const [total] = await db
       .select({ n: sql<number>`count(*)` })

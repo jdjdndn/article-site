@@ -29,10 +29,12 @@ onMounted(async () => {
 })
 
 let sharedId = ''
+const shareFail = ref('')
 async function shareFav(id: string) {
   const item = list.value.find((f: any) => f.id === id)
   const url = location.origin + '/article/' + id
   const shareText = `${item?.title || 'AI 文章站好文'}｜${item?.summary || ''}\n${url}`
+  shareFail.value = ''
   try {
     if (/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) && navigator.share) {
       await navigator.share({ title: item?.title || 'AI 文章站', text: shareText, url })
@@ -41,7 +43,25 @@ async function shareFav(id: string) {
     }
     sharedId = id
     setTimeout(() => (sharedId = ''), 2000)
-  } catch { /* 取消/失败忽略 */ }
+  } catch {
+    // 系统分享取消/剪贴板失败 → 旧版 execCommand 兜底
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = url
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta); ta.select()
+      const ok = document.execCommand('copy')
+      document.body.removeChild(ta)
+      if (ok) {
+        sharedId = id
+        setTimeout(() => (sharedId = ''), 2000)
+        return
+      }
+    } catch { /* 继续 */ }
+    // 真失败：可见提示 + 链接可长按手动复制（与详情页一致）
+    shareFail.value = url
+  }
 }
 
 const favCat = ref('all')
@@ -74,6 +94,11 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
 
     <div v-else class="fav-list">
       <p v-if="removeErr" class="remove-err">{{ removeErr }}</p>
+      <div v-if="shareFail" class="share-fail">
+        <p>复制失败，请长按下面链接手动复制：</p>
+        <code>{{ shareFail }}</code>
+        <button class="mini" @click="shareFail = ''">知道了</button>
+      </div>
       <p v-if="list.length === 100" class="limit-note">仅显示最近 100 条收藏（收藏上限 300 条）</p>
       <div class="fav-filter">
         <button
@@ -116,6 +141,28 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
 .link { color: var(--primary); text-decoration: none; }
 .fav-list { display: flex; flex-direction: column; gap: 12px; }
 .remove-err { color: #dc2626; font-size: 13px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 8px 12px; margin: 0; }
+.share-fail {
+  position: relative;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .12);
+  padding: 12px 14px;
+  margin: 0 0 4px;
+}
+.share-fail p { margin: 0 0 8px; font-size: 13px; color: var(--text); }
+.share-fail code {
+  display: block;
+  word-break: break-all;
+  font-size: 12px;
+  color: var(--primary);
+  background: var(--primary-weak);
+  border-radius: 8px;
+  padding: 8px 10px;
+  user-select: all;
+  margin-bottom: 8px;
+}
+.share-fail .mini { float: right; }
 .limit-note { color: var(--text-muted); font-size: 12px; margin: 0 0 4px; }
 .fav-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
 .fav-filter .mini { padding: 4px 14px; }
