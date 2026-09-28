@@ -4,6 +4,7 @@ import { useDb } from '../../../utils/db'
 import { articles } from '../../../db/schema'
 import { checkArticleSafety } from '../../../utils/content-safety'
 import { buildLinkStatements } from '../../../utils/links'
+import { firstImageOf, safeJson } from '../../../utils/content'
 
 // POST /api/admin/articles?key=xxx —— 手动新增文章（表单 → JSON → 入库）
 export default defineEventHandler(async (event) => {
@@ -43,6 +44,7 @@ export default defineEventHandler(async (event) => {
     title: body.title.trim(),
     summary: typeof body.summary === 'string' ? body.summary : '',
     content,
+    firstImage: firstImageOf(safeJson(content)) || '',
     template: ['deal', 'guide', 'faq'].includes(body.template) ? body.template : 'default',
     category: body.category,
     tags: normalizeJson(body.tags) ?? '[]',

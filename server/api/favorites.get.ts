@@ -49,7 +49,7 @@ export default defineEventHandler(async (event) => {
       summary: articles.summary,
       category: articles.category,
       expiresAt: articles.expiresAt,
-      content: articles.content,
+      firstImage: articles.firstImage,
       favoritedAt: favorites.createdAt,
       favId: favorites.id,
     })
@@ -63,8 +63,5 @@ export default defineEventHandler(async (event) => {
   const page = hasMore ? rows.slice(0, limit) : rows
   const nextCursor = hasMore && page.length ? `${page[page.length - 1].favoritedAt}|${page[page.length - 1].favId}` : null
 
-  return { list: page.map((r: any) => {
-    const { content, favId, ...rest } = r
-    return toListItem({ ...rest, content })
-  }), hasMore, nextCursor }
+  return { list: page.map((r: any) => toListItem(r)), hasMore, nextCursor }
 })

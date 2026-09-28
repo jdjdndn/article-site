@@ -12,8 +12,8 @@ export function firstImageOf(content: any): string {
   return b?.url || ''
 }
 
-// 行记录 → 列表输出（剥掉 content，补 firstImage）
+// 行记录 → 列表输出（优先 first_image 列，旧数据无列值时退回解析 content）
 export function toListItem(r: any): any {
   const { content, ...rest } = r
-  return { ...rest, firstImage: firstImageOf(safeJson(content)) }
+  return { ...rest, firstImage: r.firstImage || (content ? firstImageOf(safeJson(content)) : '') }
 }

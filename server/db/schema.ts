@@ -7,6 +7,7 @@ export const articles = sqliteTable('articles', {
   title: text('title').notNull(),
   summary: text('summary').notNull().default(''),
   content: text('content').notNull(),            // JSON 块数组，块类型见前台渲染：text/h2/list/price/quote/ad/image
+  firstImage: text('first_image'),                 // content 首个 image 块 URL（列表/收藏缩略图免全量拉 content，节约带宽）
   template: text('template').notNull().default('default'), // default / deal（商品带货）/ guide（攻略）/ faq（问答）
   category: text('category').notNull().default(''),
   tags: text('tags').notNull().default('[]'),    // JSON: ["牛奶","中秋"]

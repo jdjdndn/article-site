@@ -2,6 +2,7 @@ import { defineEventHandler, getQuery } from 'h3'
 import { and, eq, lt, desc, sql, or } from 'drizzle-orm'
 import { useDb } from '../../utils/db'
 import { articles } from '../../db/schema'
+import { toListItem } from '../../utils/content'
 
 // GET /api/articles?category=xx&cursor=xxx&limit=20
 // 列表只回摘要（性能），游标分页（避免 OFFSET）
@@ -35,7 +36,7 @@ export default defineEventHandler(async (event) => {
       tags: articles.tags,
       expiresAt: articles.expiresAt,
       updatedAt: articles.updatedAt,
-      content: articles.content,
+      firstImage: articles.firstImage,
     })
     .from(articles)
     .where(and(...conds))
@@ -46,19 +47,8 @@ export default defineEventHandler(async (event) => {
   const rows = hasMore ? list.slice(0, limit) : list
   const nextCursor = hasMore && rows.length ? `${rows[rows.length - 1].updatedAt}|${rows[rows.length - 1].id}` : null
 
-  // 提取首图（content 里第一个 image 块），供列表缩略图；content 不返回给前端
-  const withImg = rows.map((r: any) => {
-    let firstImage = ''
-    try {
-      const c = typeof r.content === 'string' ? JSON.parse(r.content) : r.content
-      if (Array.isArray(c)) {
-        const b = c.find((x: any) => x?.type === 'image' && x?.url)
-        if (b?.url) firstImage = b.url
-      }
-    } catch { /* 结构异常忽略 */ }
-    const { content, ...rest } = r
-    return { ...rest, firstImage }
-  })
+  // first_image 列已由写入端维护；存量 NULL 的行仍用 content 兜底解析（content 只在为空时拉取）
+  const withImg = rows.map((r: any) => toListItem(r))
 
   return { list: withImg, nextCursor, hasMore }
 })

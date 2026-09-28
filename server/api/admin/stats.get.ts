@@ -55,11 +55,12 @@ export default defineEventHandler(async (event) => {
   const topSearches = (searchRes.results || []) as { q: string; n: number }[]
 
   // 即将过期（7 天内到期的已发布文章；引流文无 expires_at 天然不在内）
+  // datetime() 规范化：expires_at 为 ISO，与 datetime('now','+7 days') 混比会跨日错位
   const expRes = await db.run(sql`
     SELECT id, title, expires_at FROM articles
     WHERE status = 'published' AND expires_at IS NOT NULL
-      AND expires_at <= datetime('now', '+7 days')
-    ORDER BY expires_at ASC LIMIT 20`)
+      AND datetime(expires_at) <= datetime('now', '+7 days')
+    ORDER BY datetime(expires_at) ASC LIMIT 20`)
   const expiringSoon = (expRes.results || []) as { id: string; title: string; expires_at: string }[]
 
   // 链接级点击 Top15（引流文归因：哪条软文链接被点得多）

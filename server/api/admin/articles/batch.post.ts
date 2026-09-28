@@ -4,6 +4,7 @@ import { useDb } from '../../../utils/db'
 import { articles } from '../../../db/schema'
 import { checkArticleSafety } from '../../../utils/content-safety'
 import { buildLinkStatements } from '../../../utils/links'
+import { firstImageOf, safeJson } from '../../../utils/content'
 
 // POST /api/admin/articles/batch?key=xxx —— 批量新增文章（AI 批量流水线产物）
 // body: { articles: Array<ArticleInput>, category?, template? }
@@ -61,6 +62,7 @@ export default defineEventHandler(async (event) => {
         title: a.title.trim(),
         summary: typeof a.summary === 'string' ? a.summary : '',
         content,
+        firstImage: firstImageOf(safeJson(content)) || '',
         template: ['deal', 'guide', 'faq'].includes(a.template) ? a.template : 'default',
         category: a.category,
         tags: normalizeJson(a.tags) ?? '[]',

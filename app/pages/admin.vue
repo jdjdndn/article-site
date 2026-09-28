@@ -399,7 +399,9 @@ async function openEdit(a: any) {
 async function save() {
   if (!validateForm()) return
   busy.value = true
-  const body = { ...form, publishAt: form.publishAt ? new Date(form.publishAt).toISOString() : '', expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : '', links: linkList.value }
+  // 链接级 expiresAt：datetime-local 本地值 → UTC ISO（避免无时区字符串被 SQLite 当 UTC 解析偏 8h）
+  const linksPayload = linkList.value.map((l: any) => (l.expiresAt ? { ...l, expiresAt: new Date(l.expiresAt).toISOString() } : l))
+  const body = { ...form, publishAt: form.publishAt ? new Date(form.publishAt).toISOString() : '', expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : '', links: linksPayload }
   try {
     if (mode.value === 'create') {
       const res = await api('/api/admin/articles', { method: 'POST', body })

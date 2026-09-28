@@ -6,6 +6,7 @@ import { articles } from '../../../db/schema'
 import { checkArticleSafety } from '../../../utils/content-safety'
 import { buildLinkStatements } from '../../../utils/links'
 import { purgeArticle } from '../../../utils/cache'
+import { firstImageOf, safeJson } from '../../../utils/content'
 
 // PUT /api/admin/articles/:id?key=xxx —— 修改文章（整篇覆盖，表单回填）
 export default defineEventHandler(async (event) => {
@@ -39,6 +40,7 @@ export default defineEventHandler(async (event) => {
     title: body.title.trim(),
     summary: typeof body.summary === 'string' ? body.summary : '',
     content,
+    firstImage: firstImageOf(safeJson(content)) || '',
     template: ['deal', 'guide', 'faq'].includes(body.template) ? body.template : 'default',
     category: body.category,
     tags: normalizeJson(body.tags) ?? '[]',
