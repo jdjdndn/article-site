@@ -23,10 +23,14 @@ export default defineEventHandler(async (event) => {
     .limit(10)
 
   const [clicks] = await db.select({ n: sql<number>`count(*)` }).from(clickLogs)
+  // "今日"口径统一北京时间（北京 00:00 = UTC 前一日 16:00；date('now') 是 UTC 日，
+  // 北京 0-8 点的数据会漏出"今日"统计）
+  const bjToday = new Date(Date.now() + 8 * 3600e3)
+  const bjStart = new Date(Date.UTC(bjToday.getUTCFullYear(), bjToday.getUTCMonth(), bjToday.getUTCDate()) - 8 * 3600e3).toISOString()
   const [todayClicks] = await db
     .select({ n: sql<number>`count(*)` })
     .from(clickLogs)
-    .where(sql`created_at >= date('now')`)
+    .where(sql`created_at >= ${bjStart}`)
   const [pendingSeeds] = await db
     .select({ n: sql<number>`count(*)` })
     .from(seeds)
@@ -39,14 +43,14 @@ export default defineEventHandler(async (event) => {
     GROUP BY c.article_id ORDER BY n DESC LIMIT 10`)
   const topClicks = (topRes.results || []) as { article_id: string; n: number; title: string | null; category: string | null }[]
 
-  // 搜索词统计（今日）
+  // 搜索词统计（今日，北京时间口径）
   const [todaySearches] = await db
     .select({ n: sql<number>`count(*)` })
     .from(searchLogs)
-    .where(sql`created_at >= date('now')`)
+    .where(sql`created_at >= ${bjStart}`)
   const searchRes = await db.run(sql`
     SELECT q, count(*) AS n FROM search_logs
-    WHERE created_at >= date('now')
+    WHERE created_at >= ${bjStart}
     GROUP BY q ORDER BY n DESC LIMIT 10`)
   const topSearches = (searchRes.results || []) as { q: string; n: number }[]
 

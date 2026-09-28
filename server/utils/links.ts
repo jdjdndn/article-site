@@ -70,7 +70,7 @@ export async function getArticleLinks(db: any, articleId: string) {
       expiresAt: links.expiresAt,
     })
     .from(links)
-    .where(and(eq(links.articleId, articleId), eq(links.status, 'active'), sql`(expires_at IS NULL OR expires_at > datetime('now'))`))
+    .where(and(eq(links.articleId, articleId), eq(links.status, 'active'), sql`(expires_at IS NULL OR datetime(expires_at) > datetime('now'))`))
     .orderBy(asc(links.sort))
 }
 

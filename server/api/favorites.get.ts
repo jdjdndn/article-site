@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
   const conds = [
     eq(favorites.deviceFp, fp),
     eq(articles.status, 'published'),
-    sql`(articles.expires_at IS NULL OR articles.expires_at > datetime('now'))`,
+    sql`(articles.expires_at IS NULL OR datetime(articles.expires_at) > datetime('now'))`,
   ]
   if (category) conds.push(eq(articles.category, category))
   if (cursor) {

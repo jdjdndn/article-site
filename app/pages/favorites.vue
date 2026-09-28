@@ -23,6 +23,8 @@ function getFp() {
 const favCat = ref('all')
 const cats = computed(() => ['all', ...Array.from(new Set(list.value.map((f: any) => f.category || '文章')))] as string[])
 const filtered = computed(() => favCat.value === 'all' ? list.value : list.value.filter((f: any) => (f.category || '文章') === favCat.value))
+// 网络图防盗链/失效时隐藏缩略图，避免破图占位
+function onImgErr(e: Event) { (e.target as HTMLElement).style.display = 'none' }
 
 async function load(append = false) {
   const fp = getFp()
@@ -142,6 +144,7 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
           @click="switchCat(c)"
         >{{ c === 'all' ? '全部' : c }}</button>
       </div>
+      <p v-if="!filtered.length" class="empty-cat">该分类暂无收藏</p>
       <div v-for="f in filtered" :key="f.id" class="fav-item">
         <div class="fav-head">
           <span class="cat">{{ f.category || '文章' }}</span>
@@ -154,7 +157,7 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
         </div>
         <NuxtLink :to="`/article/${f.id}`" class="fav-body">
           <div v-if="f.firstImage" class="fav-thumb">
-            <img :src="f.firstImage" :alt="f.title" loading="lazy" referrerpolicy="no-referrer" />
+            <img :src="f.firstImage" :alt="f.title" loading="lazy" referrerpolicy="no-referrer" @error="onImgErr" />
           </div>
           <div class="fav-text">
             <div class="fav-title">{{ f.title }}</div>
@@ -201,6 +204,7 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
 }
 .share-fail .mini { float: right; }
 .fav-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+.empty-cat { color: var(--muted, #8a94a6); font-size: 14px; padding: 12px 0; text-align: center; }
 .fav-filter .mini { padding: 4px 14px; }
 .mini {
   border: 1px solid var(--border);

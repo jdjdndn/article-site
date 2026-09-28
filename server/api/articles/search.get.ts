@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
   } catch { /* 记录失败不影响搜索 */ }
 
   // 过滤条件：已发布 + 未过期
-  const base = `a.status = 'published' AND (a.expires_at IS NULL OR a.expires_at > datetime('now'))`
+  const base = `a.status = 'published' AND (a.expires_at IS NULL OR datetime(a.expires_at) > datetime('now'))`
 
   let rows: any[]
   if (keyword.length >= 3) {

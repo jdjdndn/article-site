@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
   const conds = [
     eq(articles.status, 'published'),
     // 未过期
-    sql`(expires_at IS NULL OR expires_at > datetime('now'))`,
+    sql`(expires_at IS NULL OR datetime(expires_at) > datetime('now'))`,
   ]
   if (category) conds.push(eq(articles.category, category))
   if (cursor) {

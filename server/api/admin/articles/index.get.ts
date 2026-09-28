@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
   const q = getQuery(event)
   const status = typeof q.status === 'string' && q.status ? q.status : ''
   const needsReview = q.needsReview === '1'
-  const from = typeof q.from === 'string' && q.from ? q.from.slice(0, 10) : ''
+  const from = typeof q.from === 'string' && q.from ? q.from.slice(0, 24) : ''
   const cursor = typeof q.cursor === 'string' ? q.cursor : ''
   const limit = Math.min(Number(q.limit) || 20, 100)
   const db = useDb()
@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
       conds.push(or(lt(articles.updatedAt, u), and(eq(articles.updatedAt, u), lt(articles.id, i))))
     }
   }
-  if (from) conds.push(gte(articles.updatedAt, from + 'T00:00:00.000Z'))
+  if (from) conds.push(gte(articles.updatedAt, from))
 
   const list = await db
     .select({

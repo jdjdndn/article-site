@@ -74,7 +74,9 @@ const isQuote = (b: any) => b?.type === 'quote'
 const isImage = (b: any) => b?.type === 'image'
 const isVideo = (b: any) => b?.type === 'video'
 // 视频直链判定：mp4/webm/ogg/m4v/m3u8 可内嵌播放；其余（bilibili/抖音页面链接）走卡片跳转
-function isPlayableUrl(u: string) { return /\.(mp4|webm|ogg|m4v|m3u8)(\?|#|$)/i.test(u || '') }
+function isPlayableUrl(u: string) { return /\.(mp4|webm|ogg|m4v)(\?|#|$)/i.test(u || '') }
+// 网络图防盗链/失效时隐藏图片，保留说明文字，避免破图
+function onImgErr(e: Event) { (e.target as HTMLElement).style.display = 'none' }
 const videoEls: HTMLVideoElement[] = []
 function setVideo(el: any) { if (el && !videoEls.includes(el)) videoEls.push(el) }
 async function initPlyr() {
@@ -434,7 +436,7 @@ useHead(() => {
           </div>
           <div v-else-if="isQuote(block)" class="block-quote" :class="block.tone === 'warn' ? 'warn' : 'info'">{{ block.text }}</div>
           <figure v-else-if="isImage(block)" class="block-image">
-            <img :src="block.url" :alt="block.alt || data.article.title" loading="lazy" referrerpolicy="no-referrer" />
+            <img :src="block.url" :alt="block.alt || data.article.title" loading="lazy" referrerpolicy="no-referrer" @error="onImgErr" />
             <figcaption>{{ block.caption ? block.caption + ' · ' : '' }}图源：网络</figcaption>
           </figure>
           <div v-else-if="isVideo(block)" class="block-video">

@@ -176,6 +176,8 @@ watch(
 
 // —— 列表项收藏（CSR 补状态：不动 SSR 缓存；星标点击直接切换） ——
 const favSet = ref<Set<string>>(new Set())
+// 网络图防盗链/失效时隐藏缩略图，避免破图
+function onImgErr(e: Event) { (e.target as HTMLElement).style.display = 'none' }
 const favBusyId = ref('')
 function getFp() {
   let f = localStorage.getItem('article_fp')
@@ -265,7 +267,7 @@ async function submitTopic() {
       <p v-if="isSearching" class="search-info">「{{ kw }}」搜索结果 {{ data.list.length }} 条</p>
       <NuxtLink v-for="a in data.list" :key="a.id" :to="`/article/${a.id}`" class="card article-item">
         <div v-if="a.firstImage" class="thumb">
-          <img :src="a.firstImage" :alt="a.title" loading="lazy" referrerpolicy="no-referrer" />
+          <img :src="a.firstImage" :alt="a.title" loading="lazy" referrerpolicy="no-referrer" @error="onImgErr" />
         </div>
         <div class="info">
           <h3 class="title">{{ a.title }}</h3>

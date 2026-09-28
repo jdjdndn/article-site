@@ -49,13 +49,18 @@ async function api(path: string, opts: any = {}) {
   })
 }
 
+// 北京时间"今天"00:00 对应的 UTC ISO（北京 0-8 点的数据也属于"今天"）
+function bjTodayStartISO() {
+  const bj = new Date(Date.now() + 8 * 3600e3)
+  return new Date(Date.UTC(bj.getUTCFullYear(), bj.getUTCMonth(), bj.getUTCDate()) - 8 * 3600e3).toISOString()
+}
 const listToday = ref(false)
 const listCursor = ref('')
 const listHasMore = ref(false)
 const listLoadingMore = ref(false)
 async function loadList(append = false) {
   const res = await api('/api/admin/articles', {
-    query: { from: listToday.value ? new Date().toISOString().slice(0, 10) : undefined, cursor: listCursor.value || undefined },
+    query: { from: listToday.value ? bjTodayStartISO() : undefined, cursor: listCursor.value || undefined },
   })
   if (append) articles.value = [...articles.value, ...(res.list || [])]
   else articles.value = res.list || []
@@ -378,8 +383,8 @@ async function openEdit(a: any) {
     category: art.category,
     status: art.status,
     template: art.template || 'default',
-    expiresAt: art.expiresAt || '',
-    publishAt: art.publishAt ? art.publishAt.slice(0, 16) : '',
+    expiresAt: art.expiresAt ? fmtCN(art.expiresAt, true).replace(' ', 'T') : '',
+    publishAt: art.publishAt ? fmtCN(art.publishAt, true).replace(' ', 'T') : '',
     content: JSON.stringify(art.content, null, 2),
     links: JSON.stringify(art.links, null, 2),
     tags: JSON.stringify(art.tags, null, 2),
@@ -394,7 +399,7 @@ async function openEdit(a: any) {
 async function save() {
   if (!validateForm()) return
   busy.value = true
-  const body = { ...form, publishAt: form.publishAt ? new Date(form.publishAt).toISOString() : '', links: linkList.value }
+  const body = { ...form, publishAt: form.publishAt ? new Date(form.publishAt).toISOString() : '', expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : '', links: linkList.value }
   try {
     if (mode.value === 'create') {
       const res = await api('/api/admin/articles', { method: 'POST', body })
