@@ -37,9 +37,23 @@ async function api(path: string, opts: any = {}) {
 }
 
 const listToday = ref(false)
-async function loadList() {
-  const res = await api('/api/admin/articles', { query: { from: listToday.value ? new Date().toISOString().slice(0, 10) : undefined } })
-  articles.value = res.list || []
+const listCursor = ref('')
+const listHasMore = ref(false)
+const listLoadingMore = ref(false)
+async function loadList(append = false) {
+  const res = await api('/api/admin/articles', {
+    query: { from: listToday.value ? new Date().toISOString().slice(0, 10) : undefined, cursor: listCursor.value || undefined },
+  })
+  if (append) articles.value = [...articles.value, ...(res.list || [])]
+  else articles.value = res.list || []
+  listCursor.value = res.nextCursor || ''
+  listHasMore.value = !!res.nextCursor
+  listLoadingMore.value = false
+}
+async function loadMoreList() {
+  if (listLoadingMore.value || !listHasMore.value) return
+  listLoadingMore.value = true
+  try { await loadList(true) } catch { listLoadingMore.value = false }
 }
 function toggleToday() {
   listToday.value = !listToday.value
@@ -857,6 +871,10 @@ if (key.value) loadList()
             </tr>
           </tbody>
         </table>
+        <div v-if="listHasMore" class="pager">
+          <button class="mini" :disabled="listLoadingMore" @click="loadMoreList">{{ listLoadingMore ? '加载中…' : '加载更多' }}</button>
+          <span class="hint">已显示 {{ articles.length }} 篇</span>
+        </div>
       </div>
 
       <!-- 待审列表（内容安全命中，需人工审核） -->

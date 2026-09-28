@@ -646,16 +646,6 @@ useHead(() => {
   padding: 8px 10px;
   user-select: all;
 }
-.report-btn {
-  border: 1px solid var(--border);
-  background: #fff;
-  border-radius: 999px;
-  padding: 4px 12px;
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--text-muted);
-  transition: all .2s;
-}
 .report-mask {
   position: fixed;
   inset: 0;

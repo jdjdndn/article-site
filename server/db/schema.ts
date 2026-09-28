@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 // 文章表（v14 计划数据模型）
 // content/links/tags 等 JSON 字段以字符串存储（D1/SQLite 无原生 JSON 列）
@@ -35,6 +35,8 @@ export const favorites = sqliteTable('favorites', {
   createdAt: text('created_at').notNull(),
 }, (t) => [
   index('idx_favorites_article_fp').on(t.articleId, t.deviceFp),
+  // 唯一约束：同一设备对同一文章只允许一条收藏（favorite API 的 onConflictDoNothing 依赖此约束幂等）
+  uniqueIndex('idx_favorites_uniq').on(t.articleId, t.deviceFp),
 ])
 
 export type Article = typeof articles.$inferSelect

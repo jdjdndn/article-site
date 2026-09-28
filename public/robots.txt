@@ -23,3 +23,5 @@ Allow: /
 
 # 后台不收录
 Disallow: /admin
+
+Sitemap: https://www.wcbblll.cc/sitemap.xml

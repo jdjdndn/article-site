@@ -74,6 +74,7 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
 
     <div v-else class="fav-list">
       <p v-if="removeErr" class="remove-err">{{ removeErr }}</p>
+      <p v-if="list.length === 100" class="limit-note">仅显示最近 100 条收藏（收藏上限 300 条）</p>
       <div class="fav-filter">
         <button
           v-for="c in cats"
@@ -115,6 +116,7 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
 .link { color: var(--primary); text-decoration: none; }
 .fav-list { display: flex; flex-direction: column; gap: 12px; }
 .remove-err { color: #dc2626; font-size: 13px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 8px 12px; margin: 0; }
+.limit-note { color: var(--text-muted); font-size: 12px; margin: 0 0 4px; }
 .fav-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
 .fav-filter .mini { padding: 4px 14px; }
 .fav-item {

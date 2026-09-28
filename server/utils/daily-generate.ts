@@ -1,6 +1,6 @@
 import { and, eq, gte, ne, sql } from 'drizzle-orm'
 import { useDb } from './db'
-import { articles, runLogs } from '../db/schema'
+import { articles, runLogs, clickLogs, searchLogs, reports } from '../db/schema'
 import { useRuntimeConfig } from '#imports'
 
 // 云端兜底流水线（B 方案）：
@@ -177,6 +177,15 @@ async function aiSuggestTopics(): Promise<{ title: string; angle: string; catego
   }))
 }
 
+// 日志定期清理（90 天前；每天窗口内幂等执行——90 天前数据删空后 DELETE 0 行，零成本）
+async function cleanupOldLogs() {
+  const db = useDb()
+  await db.run(sql`DELETE FROM click_logs WHERE created_at < datetime('now', '-90 days')`)
+  await db.run(sql`DELETE FROM search_logs WHERE created_at < datetime('now', '-90 days')`)
+  await db.run(sql`DELETE FROM run_logs WHERE run_at < datetime('now', '-90 days')`)
+  await db.run(sql`DELETE FROM reports WHERE created_at < datetime('now', '-90 days') AND status = 'done'`)
+}
+
 export async function runDailyGenerate(opts: { forceWindow?: boolean } = {}) {
   const now = new Date()
   const mins = now.getUTCHours() * 60 + now.getUTCMinutes()
@@ -184,6 +193,8 @@ export async function runDailyGenerate(opts: { forceWindow?: boolean } = {}) {
     log('不在兜底窗口（北京 08:25-10:00），跳过')
     return { skipped: 'window' }
   }
+  // 日志表定期清理（点击/搜索/运行/已处理反馈，90 天前）
+  try { await cleanupOldLogs() } catch (e: any) { log('日志清理失败：', e.message) }
   const done = await publishedTodayCount()
   if (done >= TARGET) {
     log(`当天已发满 ${done} 篇，跳过`)

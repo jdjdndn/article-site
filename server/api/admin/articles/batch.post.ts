@@ -20,10 +20,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: '单次批量最多 200 篇，请分批' })
   }
 
-  const now = new Date().toISOString()
+  const baseNow = Date.now()
+  const now = new Date(baseNow).toISOString()
   const d = new Date()
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
-  const base = Date.now().toString().slice(-6)
+  const base = baseNow.toString().slice(-6)
 
   const db = useDb()
   const stmts: any[] = []
@@ -71,8 +72,8 @@ export default defineEventHandler(async (event) => {
         friendLinks: normalizeJson(a.friendLinks) ?? '[]',
         relatedIds: normalizeJson(a.relatedIds) ?? '[]',
         faq: normalizeJson(a.faq) ?? '[]',
-        createdAt: now,
-        updatedAt: now,
+        createdAt: new Date(baseNow + i).toISOString(),
+        updatedAt: new Date(baseNow + i).toISOString(),
       }))
       stmts.push(...buildLinkStatements(db, id, Array.isArray(a.links) ? a.links : [], now))
       results.push({ id, ok: true })

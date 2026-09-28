@@ -1,11 +1,12 @@
 import { defineEventHandler, getQuery, createError } from 'h3'
-import { and, eq, ne, desc, lt, gte, sql } from 'drizzle-orm'
+import { and, eq, ne, desc, lt, gte, sql, or } from 'drizzle-orm'
 import { requireAdmin } from '../../../utils/auth'
 import { useDb } from '../../../utils/db'
 import { articles } from '../../../db/schema'
 
 // GET /api/admin/articles?key=xxx&status=&needsReview=1&cursor=&limit=
 // 后台文章列表：全部状态（不含已删，回收站走 /api/admin/trash），游标分页
+// 游标为复合键 `${updatedAt}|${id}`（与前台列表一致，避免同秒时间戳漏页）
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const q = getQuery(event)
@@ -19,7 +20,12 @@ export default defineEventHandler(async (event) => {
   const conds = [ne(articles.status, 'deleted')]
   if (status) conds.push(eq(articles.status, status))
   if (needsReview) conds.push(eq(articles.needsReview, 1))
-  if (cursor) conds.push(lt(articles.updatedAt, cursor))
+  if (cursor) {
+    const [u, i] = cursor.split('|')
+    if (u && i) {
+      conds.push(or(lt(articles.updatedAt, u), and(eq(articles.updatedAt, u), lt(articles.id, i))))
+    }
+  }
   if (from) conds.push(gte(articles.updatedAt, from + 'T00:00:00.000Z'))
 
   const list = await db
@@ -37,12 +43,12 @@ export default defineEventHandler(async (event) => {
     })
     .from(articles)
     .where(and(...conds))
-    .orderBy(desc(articles.updatedAt))
+    .orderBy(desc(articles.updatedAt), desc(articles.id))
     .limit(limit + 1)
 
   const hasMore = list.length > limit
   const rows = hasMore ? list.slice(0, limit) : list
-  const nextCursor = hasMore && rows.length ? rows[rows.length - 1].updatedAt : null
+  const nextCursor = hasMore && rows.length ? `${rows[rows.length - 1].updatedAt}|${rows[rows.length - 1].id}` : null
 
   return { list: rows, nextCursor, hasMore }
 })

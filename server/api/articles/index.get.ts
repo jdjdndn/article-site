@@ -1,10 +1,11 @@
 import { defineEventHandler, getQuery } from 'h3'
-import { and, eq, lt, desc, sql } from 'drizzle-orm'
+import { and, eq, lt, desc, sql, or } from 'drizzle-orm'
 import { useDb } from '../../utils/db'
 import { articles } from '../../db/schema'
 
 // GET /api/articles?category=xx&cursor=xxx&limit=20
 // 列表只回摘要（性能），游标分页（避免 OFFSET）
+// 游标为复合键 `${updatedAt}|${id}`（避免批量入库同秒时间戳导致的漏页）
 export default defineEventHandler(async (event) => {
   const q = getQuery(event)
   const category = typeof q.category === 'string' ? q.category : ''
@@ -18,7 +19,12 @@ export default defineEventHandler(async (event) => {
     sql`(expires_at IS NULL OR expires_at > datetime('now'))`,
   ]
   if (category) conds.push(eq(articles.category, category))
-  if (cursor) conds.push(lt(articles.updatedAt, cursor))
+  if (cursor) {
+    const [u, i] = cursor.split('|')
+    if (u && i) {
+      conds.push(or(lt(articles.updatedAt, u), and(eq(articles.updatedAt, u), lt(articles.id, i))))
+    }
+  }
 
   const list = await db
     .select({
@@ -33,12 +39,12 @@ export default defineEventHandler(async (event) => {
     })
     .from(articles)
     .where(and(...conds))
-    .orderBy(desc(articles.updatedAt))
+    .orderBy(desc(articles.updatedAt), desc(articles.id))
     .limit(limit + 1)
 
   const hasMore = list.length > limit
   const rows = hasMore ? list.slice(0, limit) : list
-  const nextCursor = hasMore && rows.length ? rows[rows.length - 1].updatedAt : null
+  const nextCursor = hasMore && rows.length ? `${rows[rows.length - 1].updatedAt}|${rows[rows.length - 1].id}` : null
 
   // 提取首图（content 里第一个 image 块），供列表缩略图；content 不返回给前端
   const withImg = rows.map((r: any) => {

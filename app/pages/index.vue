@@ -196,21 +196,13 @@ async function toggleFav(id: string) {
 const topic = ref('')
 const topicBusy = ref(false)
 const topicMsg = ref('')
-function topicFp() {
-  let f = localStorage.getItem('article_fp')
-  if (!f) {
-    f = 'fp-' + Math.random().toString(36).slice(2) + Date.now().toString(36)
-    localStorage.setItem('article_fp', f)
-  }
-  return f
-}
 async function submitTopic() {
   const t = topic.value.trim()
   if (t.length < 4) { topicMsg.value = '选题至少 4 个字'; return }
   topicBusy.value = true
   topicMsg.value = ''
   try {
-    await $fetch('/api/submit-topic', { method: 'POST', body: { fp: topicFp(), topic: t } })
+    await $fetch('/api/submit-topic', { method: 'POST', body: { fp: getFp(), topic: t } })
     topicMsg.value = '选题已收到，每天 8 点自动生成，稍后来看'
     topic.value = ''
   } catch (e: any) {
