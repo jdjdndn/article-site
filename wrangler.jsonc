@@ -13,6 +13,9 @@
       "database_name": "article-db"
     }
   ],
+  "ai": {
+    "binding": "AI"
+  },
   "routes": [
     {
       "pattern": "www.wcbblll.cc",

@@ -208,16 +208,31 @@ async function reportRun(payload) {
 const TARGET = 3 // 每轮目标篇数：素材不足时由 AI 选题补足
 async function main() {
   const runStarted = new Date().toISOString()
-  // 预检：本地 AI 网关必须在线（选题与正文生成都依赖它）；不在线直接明确失败并上报
+  // 预检：本地 AI 网关在线 → 走本地全流程（DeepSeek 高质量）；离线 → 整轮转云端兜底
+  // （Workers AI 跑完整流程：选题→生成→入库→防重，不做本地一段+云端一段的接力）
+  let localAi = false
   try {
-    const probe = await fetch(`${TFG}/models`, { signal: AbortSignal.timeout(8000) })
-    if (!probe.ok) throw new Error(`HTTP ${probe.status}`)
-  } catch (e) {
-    const msg = `本地 AI 网关(localhost:3456)未在线（${e.message}）：请先启动网关（需 Chrome 登录态）再执行`
-    log('[fatal] ' + msg)
-    await reportRun({ runAt: runStarted, total: 0, ok: 0, fail: 0, error: msg.slice(0, 200) })
+    const probe = await fetch(`${TFG}/models`, { signal: AbortSignal.timeout(10000) })
+    localAi = probe.ok
+  } catch { localAi = false }
+  if (!localAi) {
+    if (dryRun) {
+      log('[auto] 本地 AI 网关(localhost:3456)离线，dry-run 不转云端（避免预览误入库），请先启动网关')
+      return
+    }
+    const msg = '本地 AI 网关(localhost:3456)离线，转云端兜底（Workers AI）执行'
+    log('[auto] ' + msg)
+    try {
+      const r = await apiFetch('/api/admin/run-daily-generate', {})
+      log('[cloud] 云端兜底结果：', JSON.stringify(r))
+      await reportRun({ runAt: runStarted, total: 0, ok: 0, fail: 0, error: msg + '，云端结果 ' + JSON.stringify(r).slice(0, 140) })
+    } catch (e) {
+      log('[cloud] 云端兜底调用失败：', e.message)
+      await reportRun({ runAt: runStarted, total: 0, ok: 0, fail: 0, error: msg + '，且云端兜底失败：' + e.message.slice(0, 120) })
+    }
     return
   }
+  log(`[auto] 本地 AI 网关在线，使用本地模型 ${model}`)
   // 防重：当天已发满 TARGET 篇则跳过（"开机补跑"幂等，避免与 8 点任务重复发）
   const todayCN = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10)
   const dayRes = await apiFetch(`/api/admin/articles?status=published&from=${todayCN}&limit=100`)
