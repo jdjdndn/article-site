@@ -4,7 +4,7 @@ import { useDb } from '../../utils/db'
 import { articles, clickLogs, seeds, searchLogs, reports } from '../../db/schema'
 import { sql } from 'drizzle-orm'
 
-// GET /api/admin/stats?key=xxx —— 后台看板（聚合查询，admin-only，量级小）
+// GET /api/admin/stats（Bearer 鉴权） —— 后台看板（聚合查询，admin-only，量级小）
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const db = useDb()

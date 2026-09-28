@@ -3,7 +3,7 @@ import { requireAdmin } from '../../../utils/auth'
 import { useDb } from '../../../utils/db'
 import { listLinks } from '../../../utils/links'
 
-// GET /api/admin/links?key=xxx&status=active|inactive|all&page=1&size=50 —— 后台链接管理列表
+// GET /api/admin/links（Bearer 鉴权） —— 后台链接管理列表
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const q = getQuery(event)

@@ -5,7 +5,7 @@ import { useDb } from '../../../utils/db'
 import { articles } from '../../../db/schema'
 import { getAllArticleLinks } from '../../../utils/links'
 
-// GET /api/admin/articles/:id?key=xxx —— 后台详情（任意状态，供编辑回填）
+// GET /api/admin/articles/:id（Bearer 鉴权） —— 后台详情（任意状态，供编辑回填）
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const id = getRouterParam(event, 'id')

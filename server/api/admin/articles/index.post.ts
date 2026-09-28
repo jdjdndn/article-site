@@ -6,7 +6,7 @@ import { checkArticleSafety } from '../../../utils/content-safety'
 import { buildLinkStatements } from '../../../utils/links'
 import { firstImageOf, safeJson } from '../../../utils/content'
 
-// POST /api/admin/articles?key=xxx —— 手动新增文章（表单 → JSON → 入库）
+// POST /api/admin/articles（Bearer 鉴权） —— 手动新增文章（表单 → JSON → 入库）
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const body = await readBody(event)

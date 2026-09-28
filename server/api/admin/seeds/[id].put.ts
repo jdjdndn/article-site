@@ -4,7 +4,7 @@ import { requireAdmin } from '../../../utils/auth'
 import { useDb } from '../../../utils/db'
 import { seeds } from '../../../db/schema'
 
-// PUT /api/admin/seeds/:id?key=xxx —— 编辑素材（仅未处理可编辑）
+// PUT /api/admin/seeds/:id（Bearer 鉴权） —— 编辑素材（仅未处理可编辑）
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const id = Number(getRouterParam(event, 'id'))

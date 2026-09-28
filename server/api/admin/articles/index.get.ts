@@ -4,8 +4,7 @@ import { requireAdmin } from '../../../utils/auth'
 import { useDb } from '../../../utils/db'
 import { articles } from '../../../db/schema'
 
-// GET /api/admin/articles?key=xxx&status=&needsReview=1&cursor=&limit=
-// 后台文章列表：全部状态（不含已删，回收站走 /api/admin/trash），游标分页
+// GET /api/admin/articles（Bearer 鉴权） 后台文章列表：全部状态（不含已删，回收站走 /api/admin/trash），游标分页
 // 游标为复合键 `${updatedAt}|${id}`（与前台列表一致，避免同秒时间戳漏页）
 export default defineEventHandler(async (event) => {
   requireAdmin(event)

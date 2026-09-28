@@ -8,7 +8,7 @@ import { buildLinkStatements } from '../../../utils/links'
 import { purgeArticle } from '../../../utils/cache'
 import { firstImageOf, safeJson } from '../../../utils/content'
 
-// PUT /api/admin/articles/:id?key=xxx —— 修改文章（整篇覆盖，表单回填）
+// PUT /api/admin/articles/:id（Bearer 鉴权） —— 修改文章（整篇覆盖，表单回填）
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const id = getRouterParam(event, 'id')

@@ -5,7 +5,7 @@ import { useDb } from '../../../../utils/db'
 import { articles } from '../../../../db/schema'
 import { purgeArticle } from '../../../../utils/cache'
 
-// DELETE /api/admin/articles/:id/permanent?key=xxx —— 真删除（物理删除，仅回收站内文章）
+// DELETE /api/admin/articles/:id/permanent（Bearer 鉴权） —— 真删除（物理删除，仅回收站内文章）
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const id = getRouterParam(event, 'id')

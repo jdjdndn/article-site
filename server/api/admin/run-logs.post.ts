@@ -3,7 +3,7 @@ import { requireAdmin } from '../../utils/auth'
 import { useDb } from '../../utils/db'
 import { runLogs } from '../../db/schema'
 
-// POST /api/admin/run-logs?key= —— 本机定时脚本每次运行上报（写日志失败不得阻塞流水线）
+// POST /api/admin/run-logs（Bearer 鉴权） —— 本机定时脚本每次运行上报（写日志失败不得阻塞流水线）
 // body: { runAt?, total, ok, fail, error?, model?, dryRun? }
 export default defineEventHandler(async (event) => {
   requireAdmin(event)

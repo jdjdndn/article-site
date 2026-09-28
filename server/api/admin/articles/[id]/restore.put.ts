@@ -5,7 +5,7 @@ import { useDb } from '../../../../utils/db'
 import { articles } from '../../../../db/schema'
 import { purgeArticle } from '../../../../utils/cache'
 
-// PUT /api/admin/articles/:id/restore?key=xxx —— 回收站恢复（status → draft）
+// PUT /api/admin/articles/:id/restore（Bearer 鉴权） —— 回收站恢复（status → draft）
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const id = getRouterParam(event, 'id')

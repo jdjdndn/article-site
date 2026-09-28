@@ -6,7 +6,7 @@ import { updateLinks } from '../../../utils/links'
 import { links } from '../../../db/schema'
 import { purgeArticle } from '../../../utils/cache'
 
-// POST /api/admin/links/batch?key=xxx —— 批量操作链接（勾选停用/启用/批量设过期日期）
+// POST /api/admin/links/batch（Bearer 鉴权） —— 批量操作链接（勾选停用/启用/批量设过期日期）
 // body: { ids: number[], status?: 'active'|'inactive', expiresAt?: string|null }
 export default defineEventHandler(async (event) => {
   requireAdmin(event)

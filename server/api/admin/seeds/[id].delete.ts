@@ -4,7 +4,7 @@ import { requireAdmin } from '../../../utils/auth'
 import { useDb } from '../../../utils/db'
 import { seeds } from '../../../db/schema'
 
-// DELETE /api/admin/seeds/:id?key=xxx —— 删除素材（任何状态）
+// DELETE /api/admin/seeds/:id（Bearer 鉴权） —— 删除素材（任何状态）
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const id = Number(getRouterParam(event, 'id'))

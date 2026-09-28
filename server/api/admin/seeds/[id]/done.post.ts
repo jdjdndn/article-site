@@ -4,7 +4,7 @@ import { requireAdmin } from '../../../../utils/auth'
 import { useDb } from '../../../../utils/db'
 import { seeds } from '../../../../db/schema'
 
-// POST /api/admin/seeds/:id/done?key=xxx —— 脚本处理成功：标记 done + 关联文章
+// POST /api/admin/seeds/:id/done（Bearer 鉴权） —— 脚本处理成功：标记 done + 关联文章
 // body: { articleId }
 export default defineEventHandler(async (event) => {
   requireAdmin(event)

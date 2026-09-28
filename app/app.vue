@@ -21,7 +21,7 @@ import { SITE_CATEGORIES } from './config/site'
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5h.01"/></svg>
             <span>关于</span>
           </NuxtLink>
-          <!-- 后台入口已隐藏：通过 https://www.wcbblll.cc/admin?key=xxx 直接访问 -->
+          <!-- 后台入口已隐藏：直接访问 https://www.wcbblll.cc/admin 输入管理密钥 -->
         </nav>
       </div>
     </header>

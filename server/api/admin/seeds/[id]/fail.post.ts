@@ -4,7 +4,7 @@ import { requireAdmin } from '../../../../utils/auth'
 import { useDb } from '../../../../utils/db'
 import { seeds } from '../../../../db/schema'
 
-// POST /api/admin/seeds/:id/fail?key=xxx —— 脚本处理失败：标记 failed + 原因（可重试）
+// POST /api/admin/seeds/:id/fail（Bearer 鉴权） —— 脚本处理失败：标记 failed + 原因（可重试）
 // body: { error }
 export default defineEventHandler(async (event) => {
   requireAdmin(event)

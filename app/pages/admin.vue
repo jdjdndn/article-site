@@ -2,20 +2,19 @@
 import { SITE_CATEGORIES } from '../config/site'
 import { reactive, ref, computed } from 'vue'
 
-// 管理密钥：进入时存 sessionStorage 并清除 URL 中的 ?key=（避免留浏览器历史/分享泄漏）；
-// 请求统一走 Authorization: Bearer（server 端 requireAdmin 已支持）
-let _key = ''
+// 管理密钥：仅存 sessionStorage，请求统一走 Authorization: Bearer
+// （不再接受 URL ?key=：密钥经 URL 会进浏览器历史/分享链接/CF 访问日志，server 端已移除该方式）
+const key = ref('')
+const keyInput = ref('')
 if (import.meta.client) {
-  try { _key = sessionStorage.getItem('manage_key') || '' } catch { /* noop */ }
+  try { key.value = sessionStorage.getItem('manage_key') || '' } catch { /* noop */ }
 }
-const route = useRoute()
-const key = computed(() => _key || ((route.query.key as string) || ''))
-if (import.meta.client && route.query.key && !_key) {
-  try { sessionStorage.setItem('manage_key', String(route.query.key)); _key = String(route.query.key) } catch { /* noop */ }
-  const qs = new URLSearchParams(route.query as any)
-  qs.delete('key')
-  const qstr = qs.toString()
-  history.replaceState(null, '', route.path + (qstr ? '?' + qstr : ''))
+function saveKey() {
+  const v = keyInput.value.trim()
+  if (!v) return
+  key.value = v
+  try { sessionStorage.setItem('manage_key', v) } catch { /* noop */ }
+  keyInput.value = ''
 }
 
 // 视图状态：list（文章管理）/ trash（回收站）；mode：list / create / edit
@@ -601,8 +600,11 @@ if (key.value) loadList()
   <div class="admin">
     <div v-if="!key" class="card warn">
       <h2>需要后台权限</h2>
-      <p>在 URL 末尾加 <code>?key=你的管理密钥</code>（与部署环境变量 MANAGE_KEY 一致）。</p>
-      <p class="hint">示例：/admin?key=xxx</p>
+      <p>输入管理密钥（与部署环境变量 MANAGE_KEY 一致），仅保存在本浏览器会话中，不会写入 URL。</p>
+      <form class="key-form" @submit.prevent="saveKey">
+        <input v-model="keyInput" type="password" placeholder="管理密钥" class="mono" autocomplete="off" />
+        <button class="primary" type="submit">进入后台</button>
+      </form>
     </div>
 
     <div v-else>
@@ -1355,4 +1357,6 @@ a.rank-title:hover { color: var(--primary); }
 .card { overflow-x: auto; }
 .tbl { min-width: 760px; }
 .tbl.small { min-width: 560px; }
+.key-form { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.key-form input { flex: 1; min-width: 200px; }
 </style>

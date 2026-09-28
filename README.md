@@ -76,7 +76,7 @@
 
 ## 二、后台录入流程（日常操作）
 
-后台地址：`https://www.wcbblll.cc/admin?key=你的管理密钥`
+后台地址：`https://www.wcbblll.cc/admin`（打开后输入管理密钥，仅保存在本浏览器会话，不写入 URL；管理密钥与部署环境变量 MANAGE_KEY 一致）
 
 ### 手动录入
 
@@ -134,7 +134,7 @@
 - 本地脚本运行时先探测本地网关：**在线 → 本地 DeepSeek 全流程**；**离线 → 整轮转云端**调用 `/api/admin/run-daily-generate`（Workers AI 开源模型 `@cf/qwen/qwen2.5-7b-instruct` 跑完整流水线：选题→生成→入库→上报），不是"本地一段+云端一段"接力。
 - **电脑关机没跑任务**：Cloudflare cron（`*/5`）在北京时间 **08:25-10:00** 窗口内轮询兜底，当天未发满 3 篇就自动补生成，发满即停；本地 8:00 已成功则云端看到当天已满直接跳过（防重共用"当天已发布 ≥3"判定，不会重复发）。
 - 云端兜底结果同样进 `run_logs`（模型列显示 `@cf/qwen/qwen2.5-7b-instruct`），后台「定时流水线」可见。
-- 手动/任意时刻触发云端兜底：`GET /api/admin/run-daily-generate?key=<管理密钥>`（忽略窗口、保留防重，幂等）。
+- 手动/任意时刻触发云端兜底：`GET /api/admin/run-daily-generate`（请求头 `Authorization: Bearer <管理密钥>`；忽略窗口、保留防重，幂等）。
 
 4. 手动跑一次 / 换模型 / 只生成不入库：
 
@@ -216,7 +216,7 @@
 
 后台「数据统计」tab：文章总数/各状态分布/分类分布（条形图）/累计与今日点击/待生成素材/
 **热门文章 Top10（点击归因）**/**今日搜索词 Top10**。
-API `GET /api/admin/stats?key=`（聚合查询，admin-only，量级小不占资源）。
+API `GET /api/admin/stats`（请求头 `Authorization: Bearer <管理密钥>`；聚合查询，admin-only，量级小不占资源）。
 
 ### 配置化
 
@@ -231,7 +231,7 @@ API `GET /api/admin/stats?key=`（聚合查询，admin-only，量级小不占资
 ### 内容批量导出
 
 后台「数据统计」tab「导出已发布文章（JSON）」按钮，或
-`GET /api/admin/export?key=&status=published` —— 全量导出含 content/faq/links/tags，
+`GET /api/admin/export?status=published`（请求头 `Authorization: Bearer <管理密钥>`）—— 全量导出含 content/faq/links/tags，
 供迁移、备份到第三方平台。
 
 ### Cloudflare 限流（Dashboard 配置，无需改代码）
@@ -325,15 +325,15 @@ npx wrangler deploy    # 部署到 www.wcbblll.cc（wrangler.jsonc 配置 D1 + a
 | GET | `/api/articles/search?q=` | FTS5 全文搜索（中文子串） |
 | POST | `/api/articles/:id/favorite` | 收藏/取消（body: fp + action） |
 | GET | `/api/favorites?fp=` | 收藏列表 |
-| POST | `/api/admin/articles?key=` | 新增（鉴权） |
-| POST | `/api/admin/articles/batch?key=` | 批量新增（D1 batch，含内容安全拦截 + 定时发布） |
-| GET | `/api/admin/articles?key=` | 管理列表（`&status=` 按状态过滤；`&needsReview=1` 只看待审） |
-| PUT | `/api/admin/articles/:id?key=` | 修改（整篇覆盖） |
-| PUT | `/api/admin/articles/:id/approve?key=` | 人工审核通过（body: `{"status":"published"|"draft"}`，默认保持原状态，仅清待审标记） |
-| DELETE | `/api/admin/articles/:id?key=` | 软删（进回收站） |
-| PUT | `/api/admin/articles/:id/restore?key=` | 恢复 |
-| DELETE | `/api/admin/articles/:id/permanent?key=` | 永久删除 |
-| GET | `/api/admin/trash?key=` | 回收站列表 |
+| POST | `/api/admin/articles`（Bearer 鉴权） | 新增（鉴权） |
+| POST | `/api/admin/articles/batch`（Bearer 鉴权） | 批量新增（D1 batch，含内容安全拦截 + 定时发布） |
+| GET | `/api/admin/articles`（Bearer 鉴权） | 管理列表（`&status=` 按状态过滤；`&needsReview=1` 只看待审） |
+| PUT | `/api/admin/articles/:id`（Bearer 鉴权） | 修改（整篇覆盖） |
+| PUT | `/api/admin/articles/:id/approve`（Bearer 鉴权） | 人工审核通过（body: `{"status":"published"|"draft"}`，默认保持原状态，仅清待审标记） |
+| DELETE | `/api/admin/articles/:id`（Bearer 鉴权） | 软删（进回收站） |
+| PUT | `/api/admin/articles/:id/restore`（Bearer 鉴权） | 恢复 |
+| DELETE | `/api/admin/articles/:id/permanent`（Bearer 鉴权） | 永久删除 |
+| GET | `/api/admin/trash`（Bearer 鉴权） | 回收站列表 |
 
 ## 八、SEO / GEO
 

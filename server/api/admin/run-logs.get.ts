@@ -4,7 +4,7 @@ import { requireAdmin } from '../../utils/auth'
 import { useDb } from '../../utils/db'
 import { runLogs } from '../../db/schema'
 
-// GET /api/admin/run-logs?key=&limit=7 —— 定时流水线运行日志
+// GET /api/admin/run-logs（Bearer 鉴权） —— 定时流水线运行日志
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const q = getQuery(event)

@@ -3,7 +3,7 @@ import { requireAdmin } from '../../../utils/auth'
 import { useDb } from '../../../utils/db'
 import { seeds } from '../../../db/schema'
 
-// POST /api/admin/seeds?key=xxx —— 批量添加素材
+// POST /api/admin/seeds（Bearer 鉴权） —— 批量添加素材
 // body: { items: [{raw, category?, template?, publishAt?, expiresAt?, source?}], category?, template?, source? }
 // source: admin(后台/热搜转素材) / user(用户投稿) / ai(AI 自动选题)
 export default defineEventHandler(async (event) => {

@@ -4,7 +4,7 @@ import { useDb } from '../../utils/db'
 import { articles } from '../../db/schema'
 import { sql } from 'drizzle-orm'
 
-// GET /api/admin/export?key=xxx&status=published —— 内容批量导出（完整 JSON，含 content/faq/links/tags）
+// GET /api/admin/export（Bearer 鉴权） —— 内容批量导出（完整 JSON，含 content/faq/links/tags）
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const q = getQuery(event)

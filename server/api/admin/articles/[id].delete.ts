@@ -5,7 +5,7 @@ import { useDb } from '../../../utils/db'
 import { articles } from '../../../db/schema'
 import { purgeArticle } from '../../../utils/cache'
 
-// DELETE /api/admin/articles/:id?key=xxx —— 软删除（status → deleted，进回收站）
+// DELETE /api/admin/articles/:id（Bearer 鉴权） —— 软删除（status → deleted，进回收站）
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const id = getRouterParam(event, 'id')

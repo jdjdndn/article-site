@@ -4,7 +4,7 @@ import { requireAdmin } from '../../utils/auth'
 import { useDb } from '../../utils/db'
 import { articles } from '../../db/schema'
 
-// GET /api/admin/trash?key=xxx&cursor=&limit= —— 回收站（status = deleted）
+// GET /api/admin/trash（Bearer 鉴权） —— 回收站（status = deleted）
 // 回收站内再次删除即真删（permanent）
 export default defineEventHandler(async (event) => {
   requireAdmin(event)

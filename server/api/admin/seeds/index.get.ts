@@ -4,8 +4,7 @@ import { useDb } from '../../../utils/db'
 import { seeds } from '../../../db/schema'
 import { and, eq, desc, sql } from 'drizzle-orm'
 
-// GET /api/admin/seeds?key=xxx&status=pending|done|failed|all&page=1&size=50
-// 素材池列表（脚本用 status=pending 拉取待处理）
+// GET /api/admin/seeds（Bearer 鉴权） 素材池列表（脚本用 status=pending 拉取待处理）
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const q = getQuery(event)

@@ -4,7 +4,7 @@ import { useDb } from '../../../utils/db'
 import { reports } from '../../../db/schema'
 import { and, desc, eq, sql } from 'drizzle-orm'
 
-// GET /api/admin/reports?key=&status=open|all&page=1&size=50 —— 用户纠错反馈
+// GET /api/admin/reports（Bearer 鉴权） —— 用户纠错反馈
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const q = getQuery(event)

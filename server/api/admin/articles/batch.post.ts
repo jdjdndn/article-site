@@ -6,7 +6,7 @@ import { checkArticleSafety } from '../../../utils/content-safety'
 import { buildLinkStatements } from '../../../utils/links'
 import { firstImageOf, safeJson } from '../../../utils/content'
 
-// POST /api/admin/articles/batch?key=xxx —— 批量新增文章（AI 批量流水线产物）
+// POST /api/admin/articles/batch（Bearer 鉴权） —— 批量新增文章（AI 批量流水线产物）
 // body: { articles: Array<ArticleInput>, category?, template? }
 // 单篇必填 title/category；content/tags/links/faq 等 JSON 字段同单篇校验规则。
 // 返回: { ok: true, results: [{ id, ok, error? }] } —— 部分成功不会整体失败
