@@ -5,6 +5,7 @@ import { SITE_CATEGORIES } from './config/site'
 
 <template>
   <div class="site">
+    <a href="#main" class="skip-link">跳到正文</a>
     <header class="site-header">
       <div class="container header-inner">
         <NuxtLink to="/" class="logo"><span class="logo-badge">文</span>AI 文章站</NuxtLink>
@@ -26,7 +27,7 @@ import { SITE_CATEGORIES } from './config/site'
       </div>
     </header>
 
-    <main class="container">
+    <main id="main" class="container">
       <NuxtPage />
     </main>
 
@@ -51,6 +52,21 @@ import { SITE_CATEGORIES } from './config/site'
 
 <style scoped>
 .site { min-height: 100vh; display: flex; flex-direction: column; }
+/* 键盘用户可访问性：跳转正文链接（默认隐藏，聚焦时显示） */
+.skip-link {
+  position: absolute;
+  left: 12px;
+  top: -48px;
+  z-index: 100;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--primary, #2563eb);
+  color: #fff;
+  font-size: 13px;
+  text-decoration: none;
+  transition: top .15s;
+}
+.skip-link:focus { top: 12px; }
 .container { width: 100%; max-width: 960px; margin: 0 auto; padding: 0 16px; box-sizing: border-box; }
 
 .site-header {

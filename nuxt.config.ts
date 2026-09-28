@@ -32,7 +32,11 @@ export default defineNuxtConfig({
       title: 'AI 文章站',
       meta: [
         { name: 'description', content: 'AI 文章站：优惠攻略、好物推荐、副业指南' },
-        { name: 'viewport', content: 'width=device-width, initial-scale=1' }
+        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+        { name: 'theme-color', content: '#2563eb' },
+        { property: 'og:locale', content: 'zh_CN' },
+        { property: 'og:site_name', content: 'AI 文章站' },
+        { property: 'og:type', content: 'website' },
       ],
       link: [
         { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },

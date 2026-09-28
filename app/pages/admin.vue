@@ -466,9 +466,11 @@ async function batchLinks(status?: 'active' | 'inactive') {
   const patch: any = {}
   if (status) patch.status = status
   else {
-    const d = prompt('设置过期日期（YYYY-MM-DD），留空清除过期时间：')
+    const d = prompt('设置过期日期（YYYY-MM-DD，当天 24 点后前台隐藏，留空清除过期时间）：')
     if (d === null) return
-    patch.expiresAt = d.trim() || null
+    const v = d.trim()
+    // 用户填 09-30 表示 9 月 30 日全天有效 → 存当天 24:00（北京时间 = UTC 当天 16:00）
+    patch.expiresAt = v ? `${v}T16:00:00.000Z` : null
   }
   if (!patch.status && !patch.expiresAt) return
   await api('/api/admin/links/batch', { method: 'POST', body: { ids: [...selLinks.value], ...patch } })
@@ -956,7 +958,7 @@ if (key.value) loadList()
               <td class="muted">{{ l.articleId }}</td>
               <td><span class="badge" :class="'kind-' + l.kind">{{ l.kind }}</span></td>
               <td><span class="badge" :class="l.status">{{ l.status }}</span></td>
-              <td class="muted">{{ l.expiresAt || '—' }}</td>
+              <td class="muted">{{ fmtCN(l.expiresAt) || '—' }}</td>
             </tr>
           </tbody>
         </table>
@@ -1004,7 +1006,7 @@ if (key.value) loadList()
               </td>
               <td class="muted">{{ s.category }} / {{ s.template }}</td>
               <td><span class="badge" :class="'seed-' + s.status">{{ s.status }}</span></td>
-              <td class="muted">{{ fmtCN(s.publishAt, true) || '—' }} / {{ s.expiresAt || '—' }}</td>
+              <td class="muted">{{ fmtCN(s.publishAt, true) || '—' }} / {{ fmtCN(s.expiresAt) || '—' }}</td>
               <td>
                 <NuxtLink v-if="s.articleId" :to="`/article/${s.articleId}`" target="_blank" class="mini">查看文章</NuxtLink>
                 <button v-if="s.status === 'failed'" class="mini" @click="retrySeed(s)">重试</button>
@@ -1088,7 +1090,7 @@ if (key.value) loadList()
             <li v-for="(e, i) in stats.expiringSoon" :key="e.id">
               <span class="rank-no">{{ i + 1 }}</span>
               <NuxtLink :to="`/article/${e.id}`" target="_blank" class="rank-title">{{ e.title }}</NuxtLink>
-              <span class="rank-n warn">到期 {{ e.expires_at?.slice(0, 10) }}</span>
+              <span class="rank-n warn">到期 {{ fmtCN(e.expires_at) }}</span>
             </li>
           </ol>
 

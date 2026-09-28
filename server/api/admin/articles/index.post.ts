@@ -33,7 +33,10 @@ export default defineEventHandler(async (event) => {
   if (publishAt && publishAt > now) status = 'draft'
 
   // 内容安全兜底：命中违规词 → 强制草稿待人工审核
-  const safety = checkArticleSafety({ title: body.title, summary: body.summary, content })
+  const safety = checkArticleSafety({
+    title: body.title, summary: body.summary, content,
+    faq: body.faq, tags: body.tags, links: body.links, friendLinks: body.friendLinks,
+  })
   const safetyHits = safety.hits.length > 0 && status === 'published' ? safety.hits : []
   const needsReview = safetyHits.length > 0 ? 1 : 0
   if (safetyHits.length > 0) status = 'draft'

@@ -57,8 +57,12 @@ export function scanText(text: string): SafetyHit[] {
   return hits
 }
 
-// 对文章字段整体扫描：标题/摘要/正文原文（content 为 JSON 块数组或 JSON 字符串）
-export function checkArticleSafety(input: { title?: string; summary?: string; content?: any }): SafetyResult {
+// 对文章字段整体扫描：标题/摘要/正文（含图片视频 URL 与说明）/FAQ/标签/软文链接
+// 只扫文本与 label/url 中的词面命中；URL 域名本身不展开判断
+export function checkArticleSafety(input: {
+  title?: string; summary?: string; content?: any;
+  faq?: any; tags?: any; links?: any; friendLinks?: any;
+}): SafetyResult {
   const texts: string[] = []
   if (input.title) texts.push(input.title)
   if (input.summary) texts.push(input.summary)
@@ -70,8 +74,29 @@ export function checkArticleSafety(input: { title?: string; summary?: string; co
         if (typeof block.text === 'string') texts.push(block.text)
         if (Array.isArray(block.items)) texts.push(block.items.join(' '))
         if (typeof block.label === 'string') texts.push(block.label)
+        // 图片/视频块的 URL 与说明文字
+        if (typeof block.url === 'string') texts.push(block.url)
+        if (typeof block.caption === 'string') texts.push(block.caption)
+        if (typeof block.alt === 'string') texts.push(block.alt)
+        if (typeof block.title === 'string' && block.type === 'video') texts.push(block.title)
       }
     }
+  }
+  // FAQ（q/a）
+  for (const f of safeArr(input.faq)) {
+    if (typeof f?.q === 'string') texts.push(f.q)
+    if (typeof f?.a === 'string') texts.push(f.a)
+  }
+  // 标签
+  for (const t of safeArr(input.tags)) { if (typeof t === 'string') texts.push(t) }
+  // 软文链接（label + url）与友链（name + url）
+  for (const l of safeArr(input.links)) {
+    if (typeof l?.label === 'string') texts.push(l.label)
+    if (typeof l?.url === 'string') texts.push(l.url)
+  }
+  for (const f of safeArr(input.friendLinks)) {
+    if (typeof f?.name === 'string') texts.push(f.name)
+    if (typeof f?.url === 'string') texts.push(f.url)
   }
   const seen = new Map<string, SafetyHit>()
   for (const t of texts) {
@@ -81,4 +106,10 @@ export function checkArticleSafety(input: { title?: string; summary?: string; co
   }
   const hits = [...seen.values()]
   return { ok: hits.length === 0, hits }
+}
+
+function safeArr(v: any): any[] {
+  if (Array.isArray(v)) return v
+  if (typeof v === 'string') { try { const p = JSON.parse(v); return Array.isArray(p) ? p : [] } catch { return [] } }
+  return []
 }
