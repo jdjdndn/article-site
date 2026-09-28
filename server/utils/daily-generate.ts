@@ -1,6 +1,6 @@
-import { and, eq, gte } from 'drizzle-orm'
+import { and, eq, gte, ne } from 'drizzle-orm'
 import { useDb } from './db'
-import { articles } from '../db/schema'
+import { articles, runLogs } from '../db/schema'
 import { useRuntimeConfig } from '#imports'
 
 // 云端兜底流水线（B 方案）：
@@ -12,7 +12,7 @@ import { useRuntimeConfig } from '#imports'
 const SITE = 'https://www.wcbblll.cc'
 const MODEL = '@cf/qwen/qwen2.5-7b-instruct'
 const TARGET = 3
-const WINDOW_START_MIN = 25 // UTC 00:25 = 北京 08:25
+const WINDOW_START_MIN = 40 // UTC 00:40 = 北京 08:40（给本地 8:00 任务留足完成时间，压掉并发竞态窗口）
 const WINDOW_END_MIN = 120 // UTC 02:00 = 北京 10:00
 
 const log = (...a: any[]) => console.log(new Date().toISOString(), '[daily-generate]', ...a)
@@ -123,6 +123,22 @@ async function publishedTodayCount(): Promise<number> {
   return rows.length
 }
 
+// 今天是否有本地流水线的成功记录（model 非云端模型且成功数 ≥1）。
+// 有 → 本地 8:00 任务已产文，云端信任本地、全天跳过，
+// 避免"本地运行中/已完成 + 云端窗口"并发双跑导致超发。
+// （本地网关离线转云端时脚本上报 ok=0，不影响本判定。）
+async function hasLocalRunToday(): Promise<boolean> {
+  const db = useDb()
+  const todayCN = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10)
+  const from = todayCN + 'T00:00:00.000Z'
+  const rows = await db
+    .select({ id: runLogs.id, ok: runLogs.ok })
+    .from(runLogs)
+    .where(and(ne(runLogs.model, MODEL), gte(runLogs.ok, 1), gte(runLogs.runAt, from)))
+    .limit(1)
+  return rows.length > 0
+}
+
 async function aiSuggestTopics(): Promise<{ title: string; angle: string; category: string }[]> {
   const text = await aiChat([
     { role: 'system', content: aiSuggestPrompt() },
@@ -150,6 +166,13 @@ export async function runDailyGenerate(opts: { forceWindow?: boolean } = {}) {
     log(`当天已发满 ${done} 篇，跳过`)
     return { skipped: 'quota', done }
   }
+  if (!opts.forceWindow) {
+    // 竞态防护：今天已有本地流水线成功记录 → 信任本地，云端跳过（手动触发不受此限）
+    if (await hasLocalRunToday()) {
+      log('今天已有本地流水线成功记录，云端信任本地，跳过')
+      return { skipped: 'local-run' }
+    }
+  }
   log(`当天已发布 ${done}/${TARGET} 篇，开始兜底（模型 ${MODEL}）`)
   let { list } = await apiFetch('/api/admin/seeds?status=pending&size=10')
   const have = list?.length || 0
@@ -176,6 +199,19 @@ export async function runDailyGenerate(opts: { forceWindow?: boolean } = {}) {
   if (!list || !list.length) {
     log('素材池没有待处理素材')
     return { ok: 0, fail: 0, total: 0 }
+  }
+  // 重复素材防护：仍 pending 但已关联文章（上次 done 失败残留）→ 补 done，不重复生成
+  const linked = list.filter((s: any) => s.article_id)
+  if (linked.length) {
+    for (const s of linked) {
+      await apiFetch(`/api/admin/seeds/${s.id}/done`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ articleId: s.article_id }),
+      }).catch(() => log(`补 done 失败 seed#${s.id}`))
+    }
+    list = list.filter((s: any) => !s.article_id)
+    log(`清理 ${linked.length} 条已关联文章的残留 pending 素材`)
   }
   const targets = list.slice(0, TARGET)
   const results = await Promise.allSettled(targets.map(async (s: any) => {
