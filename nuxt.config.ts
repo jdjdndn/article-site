@@ -20,6 +20,7 @@ export default defineNuxtConfig({
     '/article/**': { cache: { maxAge: 300, swr: false, staleMaxAge: 0 } },
     '/about': { cache: { maxAge: 3600, swr: false, staleMaxAge: 0 } },
     '/sitemap.xml': { cache: { maxAge: 3600, swr: false, staleMaxAge: 0 } },
+    '/feed.xml': { cache: { maxAge: 3600, swr: false, staleMaxAge: 0 } },
     '/favorites': { headers: { 'Cache-Control': 'no-store' } },
     '/admin': { headers: { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' } },
     '/api/**': { headers: { 'Cache-Control': 'no-store' } },
@@ -34,7 +35,9 @@ export default defineNuxtConfig({
         { name: 'viewport', content: 'width=device-width, initial-scale=1' }
       ],
       link: [
-        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
+        { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' },
+        { rel: 'alternate', type: 'application/rss+xml', title: 'AI 文章站', href: '/feed.xml' },
       ]
     }
   },

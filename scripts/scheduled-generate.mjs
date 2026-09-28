@@ -180,8 +180,11 @@ async function aiGenerate(raw) {
 }
 async function apiFetch(pathname, opts = {}) {
   const key = getKey()
-  const url = pathname.includes('?') ? `${SITE}${pathname}&key=${key}` : `${SITE}${pathname}?key=${key}`
-  const res = await fetch(url, opts)
+  // 密钥走 Authorization header（与 server 端 requireAdmin 一致，不再拼 ?key=）
+  const res = await fetch(`${SITE}${pathname}`, {
+    ...opts,
+    headers: { ...(opts.headers || {}), Authorization: `Bearer ${key}` },
+  })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(`API HTTP ${res.status}: ${JSON.stringify(data).slice(0, 200)}`)
   return data

@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
 // 收藏列表（设备指纹免登录；CSR：指纹在 localStorage，SSR 拿不到）
+// 游标分页（服务端 createdAt|id 复合游标）+ 分类服务端过滤；分享失败给可见兜底
 const list = ref<any[]>([])
 const loading = ref(true)
 const err = ref('')
 const removeErr = ref('')
+const cursor = ref('')
+const hasMore = ref(false)
+const loadingMore = ref(false)
 
 function getFp() {
   let f = localStorage.getItem('article_fp')
@@ -16,17 +20,51 @@ function getFp() {
   return f
 }
 
+const favCat = ref('all')
+const cats = computed(() => ['all', ...Array.from(new Set(list.value.map((f: any) => f.category || '文章')))] as string[])
+const filtered = computed(() => favCat.value === 'all' ? list.value : list.value.filter((f: any) => (f.category || '文章') === favCat.value))
+
+async function load(append = false) {
+  const fp = getFp()
+  const res: any = await $fetch('/api/favorites', {
+    query: {
+      fp,
+      category: favCat.value === 'all' ? undefined : favCat.value,
+      cursor: cursor.value || undefined,
+      limit: 30,
+    },
+  })
+  if (append) list.value = [...list.value, ...(res.list || [])]
+  else list.value = res.list || []
+  cursor.value = res.nextCursor || ''
+  hasMore.value = !!res.nextCursor
+}
+
+async function loadMore() {
+  if (loadingMore.value || !hasMore.value) return
+  loadingMore.value = true
+  try { await load(true) } catch (e: any) { removeErr.value = e?.data?.statusMessage || '加载失败，请重试' } finally { loadingMore.value = false }
+}
+
 onMounted(async () => {
   try {
-    const fp = getFp()
-    const res = await $fetch('/api/favorites', { query: { fp } })
-    list.value = res.list || []
+    await load(false)
   } catch (e: any) {
     err.value = e?.data?.statusMessage || e?.message || '加载失败'
   } finally {
     loading.value = false
   }
 })
+
+// 切换分类：服务端重新过滤 + 重置游标（避免前端过滤与分页错位）
+function switchCat(c: string) {
+  if (favCat.value === c) return
+  favCat.value = c
+  cursor.value = ''
+  list.value = []
+  loading.value = true
+  load(false).catch((e: any) => { err.value = e?.data?.statusMessage || '加载失败' }).finally(() => { loading.value = false })
+}
 
 let sharedId = ''
 const shareFail = ref('')
@@ -64,10 +102,6 @@ async function shareFav(id: string) {
   }
 }
 
-const favCat = ref('all')
-const cats = computed(() => ['all', ...Array.from(new Set(list.value.map((f: any) => f.category || '文章')))] as string[])
-const filtered = computed(() => favCat.value === 'all' ? list.value : list.value.filter((f: any) => (f.category || '文章') === favCat.value))
-
 async function removeFav(id: string) {
   try {
     await $fetch(`/api/articles/${id}/favorite`, { method: 'POST', body: { fp: getFp(), action: 'remove' } })
@@ -99,20 +133,19 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
         <code>{{ shareFail }}</code>
         <button class="mini" @click="shareFail = ''">知道了</button>
       </div>
-      <p v-if="list.length === 100" class="limit-note">仅显示最近 100 条收藏（收藏上限 300 条）</p>
       <div class="fav-filter">
         <button
           v-for="c in cats"
           :key="c"
           class="mini"
           :class="{ on: favCat === c }"
-          @click="favCat = c"
+          @click="switchCat(c)"
         >{{ c === 'all' ? '全部' : c }}</button>
       </div>
       <div v-for="f in filtered" :key="f.id" class="fav-item">
         <div class="fav-head">
           <span class="cat">{{ f.category || '文章' }}</span>
-          <span v-if="f.expiresAt" class="exp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9.5v3.5l2.5 1.5"/><path d="M4.5 4.5 3 6M19.5 4.5 21 6"/></svg>{{ f.expiresAt }}</span>
+          <span v-if="f.expiresAt" class="exp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9.5v3.5l2.5 1.5"/><path d="M4.5 4.5 3 6M19.5 4.5 21 6"/></svg>{{ fmtCN(f.expiresAt) }}</span>
           <button class="share" @click="shareFav(f.id)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
             {{ sharedId === f.id ? '已复制' : '分享' }}
@@ -129,6 +162,10 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
           </div>
         </NuxtLink>
       </div>
+      <div v-if="hasMore" class="pager">
+        <button class="mini load-more" :disabled="loadingMore" @click="loadMore">{{ loadingMore ? '加载中…' : '加载更多' }}</button>
+      </div>
+      <p v-else class="list-end">已加载全部收藏</p>
     </div>
   </div>
 </template>
@@ -163,9 +200,20 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
   margin-bottom: 8px;
 }
 .share-fail .mini { float: right; }
-.limit-note { color: var(--text-muted); font-size: 12px; margin: 0 0 4px; }
 .fav-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
 .fav-filter .mini { padding: 4px 14px; }
+.mini {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 4px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all .2s;
+}
+.mini:hover { border-color: var(--primary); color: var(--primary); }
+.mini.on { background: var(--primary); border-color: transparent; color: #fff; font-weight: 600; }
 .fav-item {
   display: block;
   padding: 16px 18px;
@@ -238,6 +286,9 @@ useHead({ title: '我的收藏 - AI 文章站', meta: [{ name: 'robots', content
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.pager { text-align: center; margin-top: 4px; }
+.load-more { padding: 8px 26px; }
+.list-end { text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 6px; }
 @media (max-width: 600px) {
   .fav-thumb { width: 92px; height: 64px; border-radius: 8px; }
 }

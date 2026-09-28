@@ -79,7 +79,6 @@ useHead(() => {
         '@context': 'https://schema.org',
         '@type': 'ItemList',
         name: 'AI 文章站' + (active.value === '全部' ? '' : ' - ' + active.value),
-        numberOfItems: list.length,
         itemListElement: list.map((a: any, i: number) => ({
           '@type': 'ListItem',
           position: i + 1,
@@ -274,7 +273,7 @@ async function submitTopic() {
           <div class="meta">
             <span class="category">{{ a.category }}</span>
             <span v-if="a.updatedAt" class="date">{{ fmtCN(a.updatedAt) }}</span>
-            <span v-if="a.expiresAt" class="expire">有效期至 {{ a.expiresAt }}</span>
+            <span v-if="a.expiresAt" class="expire">有效期至 {{ fmtCN(a.expiresAt) }}</span>
             <button
               class="star"
               :class="{ on: favSet.has(a.id) }"

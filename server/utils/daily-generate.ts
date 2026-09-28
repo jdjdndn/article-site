@@ -114,8 +114,12 @@ async function aiChat(messages: { role: string; content: string }[]): Promise<st
 async function apiFetch(pathname: string, opts: any = {}) {
   const cfg: any = useRuntimeConfig()
   const key = cfg.manageKey || ''
-  const url = pathname.includes('?') ? `${SITE}${pathname}&key=${key}` : `${SITE}${pathname}?key=${key}`
-  const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(30000) })
+  // 密钥走 Authorization header（不再拼 ?key=，避免密钥进 CF 访问日志/分享链接）
+  const res = await fetch(`${SITE}${pathname}`, {
+    ...opts,
+    headers: { ...(opts.headers || {}), Authorization: `Bearer ${key}` },
+    signal: AbortSignal.timeout(30000),
+  })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(`API HTTP ${res.status}: ${JSON.stringify(data).slice(0, 200)}`)
   return data

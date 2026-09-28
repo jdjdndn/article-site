@@ -226,13 +226,16 @@ useHead(() => {
   const a = data.value?.article
   if (!a) return {}
   const url = `https://www.wcbblll.cc/article/${a.id}`
+  // OG/JSON-LD 图片：正文首图优先（网络图可能有防盗链，仅作结构化字段；无首图回退站标）
+  const firstImg = Array.isArray(a.content) ? (a.content.find((b: any) => b?.type === 'image' && b?.url)?.url || '') : ''
+  const cover = firstImg || 'https://www.wcbblll.cc/og-cover.png'
   const ld: any[] = [{
     '@context': 'https://schema.org',
     '@type': 'Article',
     headline: a.title,
     description: a.summary,
     url,
-    image: 'https://www.wcbblll.cc/og-cover.png',
+    image: cover,
     inLanguage: 'zh-CN',
     mainEntityOfPage: { '@type': 'WebPage', '@id': url },
     datePublished: a.createdAt,
@@ -279,7 +282,7 @@ useHead(() => {
       { name: 'twitter:card', content: 'summary_large_image' },
       { name: 'twitter:title', content: a.title },
       { name: 'twitter:description', content: a.summary },
-      { name: 'twitter:image', content: 'https://www.wcbblll.cc/og-cover.png' },
+      { name: 'twitter:image', content: cover },
     ],
     script: [{ type: 'application/ld+json', innerHTML: JSON.stringify(ld) }],
   }
@@ -321,9 +324,12 @@ useHead(() => {
       <h1 class="title">{{ data.article.title }}</h1>
       <p class="summary">{{ data.article.summary }}</p>
       <p class="ai-note"><span class="ai-badge">AI 整理</span>文中含推广链接，价格与优惠以实际页面为准</p>
+      <div v-if="data.article.tags?.length" class="tags">
+        <NuxtLink v-for="t in data.article.tags" :key="t" :to="{ path: '/', query: { q: t } }" class="tag">{{ t }}</NuxtLink>
+      </div>
       <div class="meta">
         <div class="meta-info">
-          <span v-if="data.article.expiresAt" class="expire">优惠截止：{{ data.article.expiresAt }}</span>
+          <span v-if="data.article.expiresAt" class="expire">优惠截止：{{ fmtCN(data.article.expiresAt) }}</span>
           <span class="published">发布于 {{ formatDate(data.article.createdAt) }}</span>
           <span class="time">更新于 {{ formatDate(data.article.updatedAt) }}</span>
         </div>
@@ -567,6 +573,19 @@ useHead(() => {
 .meta-actions { display: flex; align-items: center; gap: 8px; }
 .fav-msg { color: var(--danger); font-size: 12px; }
 .meta .time { display: inline-flex; align-items: center; gap: 5px; }
+.tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.tag {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: var(--primary-weak);
+  border: 1px solid #dbeafe;
+  color: var(--primary);
+  font-size: 12px;
+  text-decoration: none;
+  transition: background .2s;
+}
+.tag:hover { background: #dbeafe; }
 .meta .published { display: inline-flex; align-items: center; gap: 5px; }
 .meta .published::before {
   content: '';

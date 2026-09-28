@@ -42,13 +42,15 @@ export async function ensureFts() {
       VALUES (new.rowid, new.title, new.summary, new.content, new.category);
     END;
   `)
-  // 差量回填：只补 articles 有而 fts 缺的 rowid（新文章/上次未回填部分）
+  // 差量回填：只补 articles 有而 fts 缺的 rowid（新文章/上次未回填部分）。
+  // 限定近 7 天更新：触发器已保证新写自动入 fts，历史缺行只会在建表瞬间产生，
+  // 避免文章量大后每次 isolate 冷启动的首次搜索全表 LEFT JOIN 扫全库。
   await db.run(`
     INSERT INTO articles_fts(rowid, title, summary, content, category)
     SELECT a.rowid, a.title, a.summary, a.content, a.category
     FROM articles a
     LEFT JOIN articles_fts f ON f.rowid = a.rowid
-    WHERE f.rowid IS NULL;
+    WHERE f.rowid IS NULL AND a.updated_at > datetime('now', '-7 days');
   `)
   _ftsReady = true
 }

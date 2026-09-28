@@ -1,8 +1,9 @@
-import { defineEventHandler, getQuery, createError } from 'h3'
+import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { sql } from 'drizzle-orm'
 import { useDb, ensureFts } from '../../utils/db'
 import { searchLogs } from '../../db/schema'
 import { toListItem } from '../../utils/content'
+import { rateLimit } from '../../utils/ratelimit'
 
 // GET /api/articles/search?q=xxx&page=1&limit=20
 // FTS5 全文搜索（trigram，中文子串匹配），长词走 MATCH，短词（<3 字）降级 LIKE
@@ -17,6 +18,12 @@ export default defineEventHandler(async (event) => {
   const offset = (page - 1) * limit
   if (!keyword) return { list: [], hasMore: false, nextPage: null }
   if (keyword.length > 50) throw createError({ statusCode: 400, statusMessage: '关键词过长' })
+
+  // IP 限频兜底（防脚本刷 search_logs / 拖垮 FTS 查询；本地/dev 无 CF 头则跳过）
+  const ip = getRequestHeader(event, 'cf-connecting-ip') || ''
+  if (ip && !(await rateLimit('ip:' + ip + ':search', 3600e3, 300))) {
+    throw createError({ statusCode: 429, statusMessage: '搜索太频繁，请稍后再试' })
+  }
 
   const db = useDb()
   await ensureFts()
