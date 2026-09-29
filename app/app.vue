@@ -44,6 +44,8 @@ import { SITE_CATEGORIES } from './config/site'
         <div class="friend-links">
           <a href="https://jdjdndn.github.io" target="_blank" rel="noopener">jdjdndn.github.io</a>
           <a href="https://wcbblll.cc" target="_blank" rel="noopener">wcbblll.cc</a>
+          <a href="https://www.wcbblll.cc" target="_blank" rel="noopener">www.wcbblll.cc</a>
+          <a href="https://sy.wcbblll.cc" target="_blank" rel="noopener">sy.wcbblll.cc</a>
         </div>
       </div>
     </footer>

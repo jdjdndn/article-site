@@ -843,7 +843,7 @@ if (key.value) loadList()
           <div v-if="preview.tags?.length" class="tags">
             <span v-for="(t, i) in preview.tags" :key="i" class="tag">{{ t }}</span>
           </div>
-          <section class="friend">
+          <!-- <section class="friend">
             <h2>友情链接</h2>
             <div class="friend-links">
               <template v-if="preview.friendLinks?.length">
@@ -856,7 +856,7 @@ if (key.value) loadList()
                 <a href="https://sy.wcbblll.cc" target="_blank" rel="noopener">sy.wcbblll.cc</a>
               </template>
             </div>
-          </section>
+          </section> -->
         </div>
         <div class="actions">
           <button class="primary" :disabled="busy" @click="save">{{ busy ? '保存中…' : '确认保存' }}</button>

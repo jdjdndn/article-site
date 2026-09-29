@@ -25,6 +25,20 @@ if (error.value) {
   throw createError({ statusCode: error.value?.statusCode || 404, statusMessage: error.value?.statusMessage || '文章不存在' })
 }
 
+// 内容块归一化：容忍 AI 模型输出的块缺 type 字段（如 {"list":{"items":[...]}}），按键名补全 type，
+// 避免整块被渲染逻辑静默丢弃（对历史文章同样生效）
+const blocks = computed<any[]>(() => {
+  const arr: any[] = data.value?.article?.content || []
+  return arr.map((b) => {
+    if (b && typeof b === 'object' && !b.type) {
+      if (Array.isArray(b.list?.items)) return { type: 'list', items: b.list.items }
+      if (typeof b.h2 === 'string') return { type: 'h2', text: b.h2 }
+      if (typeof b.text === 'string') return { type: 'text', text: b.text }
+    }
+    return b
+  })
+})
+
 const favorited = ref(false)
 const favoriteCount = ref(0)
 
@@ -419,7 +433,7 @@ useHead(() => {
           </details>
         </section>
 
-        <template v-for="(block, i) in data.article.content" :key="i">
+        <template v-for="(block, i) in blocks" :key="i">
           <div v-if="isAd(block)" class="ad-block">
             <span class="ad-label">{{ block.label || '广告' }}</span>
             <p>{{ block.text }}</p>
@@ -521,7 +535,7 @@ useHead(() => {
       </section>
 
       <!-- 底部友链 -->
-      <section class="friend card">
+      <!-- <section class="friend card">
         <h2>友情链接</h2>
         <div class="friend-links">
           <template v-if="data.article.friendLinks?.length">
@@ -534,7 +548,7 @@ useHead(() => {
             <a href="https://sy.wcbblll.cc" target="_blank" rel="noopener">sy.wcbblll.cc</a>
           </template>
         </div>
-      </section>
+      </section> -->
     </div>
   </div>
 </template>
@@ -840,7 +854,7 @@ useHead(() => {
   font-weight: 500;
 }
 
-.content { margin-bottom: 22px; padding: 24px; max-width: 760px; margin-left: auto; margin-right: auto; }
+.content { margin-bottom: 22px; padding: 24px;  margin-left: auto; margin-right: auto; }
 .text-block { margin-bottom: 14px; line-height: 1.85; color: #374151; font-size: 15px; }
 .block-h2 {
   font-size: 18px;
@@ -965,7 +979,7 @@ useHead(() => {
 }
 .ad-link { display: inline-block; margin-top: 6px; font-weight: 600; color: var(--primary); text-decoration: none; }
 
-.faq { margin-bottom: 22px; padding: 20px 24px; max-width: 760px; margin-left: auto; margin-right: auto; }
+.faq { margin-bottom: 22px; padding: 20px 24px;  margin-left: auto; margin-right: auto; }
 .faq h2 { font-size: 17px; margin-bottom: 6px; color: var(--text); }
 .faq details {
   border-radius: 10px;
@@ -1011,7 +1025,7 @@ useHead(() => {
 }
 .link-btn:hover { opacity: .92; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(37, 99, 235, .34); }
 
-.related { margin-bottom: 22px; padding: 20px 24px; max-width: 760px; margin-left: auto; margin-right: auto; }
+.related { margin-bottom: 22px; padding: 20px 24px;  margin-left: auto; margin-right: auto; }
 .related h2, .friend h2 { font-size: 17px; margin-bottom: 10px; color: var(--text); }
 .related-item {
   display: block;
@@ -1024,7 +1038,7 @@ useHead(() => {
   transition: background .2s;
 }
 .related-item:hover { background: var(--primary-weak); }
-.friend { padding: 20px 24px; max-width: 760px; margin-left: auto; margin-right: auto; }
+.friend { padding: 20px 24px;  margin-left: auto; margin-right: auto; }
 .friend-links { display: flex; flex-wrap: wrap; gap: 8px; }
 .friend-links a {
   display: inline-block;

@@ -131,9 +131,9 @@
 
 **双保险（云端兜底，电脑关机也不断更）**：
 
-- 本地脚本运行时先探测本地网关：**在线 → 本地 DeepSeek 全流程**；**离线 → 整轮转云端**调用 `/api/admin/run-daily-generate`（Workers AI 开源模型 `@cf/qwen/qwen2.5-7b-instruct` 跑完整流水线：选题→生成→入库→上报），不是"本地一段+云端一段"接力。
+- 本地脚本运行时先探测本地网关：**在线 → 本地 DeepSeek 全流程**；**离线 → 整轮转云端**调用 `/api/admin/run-daily-generate`（Workers AI 开源模型 `@cf/qwen/qwen3-30b-a3b-fp8` 跑完整流水线：选题→生成→入库→上报），不是"本地一段+云端一段"接力。
 - **电脑关机没跑任务**：Cloudflare cron（`*/5`）在北京时间 **08:25-10:00** 窗口内轮询兜底，当天未发满 3 篇就自动补生成，发满即停；本地 8:00 已成功则云端看到当天已满直接跳过（防重共用"当天已发布 ≥3"判定，不会重复发）。
-- 云端兜底结果同样进 `run_logs`（模型列显示 `@cf/qwen/qwen2.5-7b-instruct`），后台「定时流水线」可见。
+- 云端兜底结果同样进 `run_logs`（模型列显示 `@cf/qwen/qwen3-30b-a3b-fp8`），后台「定时流水线」可见。
 - 手动/任意时刻触发云端兜底：`GET /api/admin/run-daily-generate`（请求头 `Authorization: Bearer <管理密钥>`；忽略窗口、保留防重，幂等）。
 
 4. 手动跑一次 / 换模型 / 只生成不入库：
@@ -351,6 +351,9 @@ npx wrangler deploy    # 部署到 www.wcbblll.cc（wrangler.jsonc 配置 D1 + a
 - **Nuxt runtimeConfig secret 前缀**：服务端读 `NUXT_MANAGE_KEY`，不是 `MANAGE_KEY`
 - **PowerShell 调 API 中文乱码**：Invoke-RestMethod 字符串 Body 会丢中文，用 `[Text.Encoding]::UTF8.GetBytes()` + WebRequest
 - **wrangler tail 在部分网络 ETIMEDOUT**：本地 `wrangler dev` 复现更稳
+- **Worker 不能通过公网域名自调用自身 API**：Cloudflare 对 Worker fetch 自己 custom domain 直接返回 404 空响应（防自调用/循环）。`runDailyGenerate` 云端兜底因此改为直连 D1 + 复用 `server/utils/pipeline.ts` 业务函数（与 API 行为同构），**不要再加回公网自调用**
+- **Workers AI 模型会下架**：`@cf/qwen/qwen2.5-7b-instruct` 已下线（错误 5007: No such model）。现用 `@cf/qwen/qwen3-30b-a3b-fp8`（中文质量好、无编造链接；注意 `max_tokens` 要给足，否则答案被思考过程挤掉）。模型返回结构各不同：Llama 3.3 是 `{ result: { response } }`、Qwen3 是 OpenAI 兼容 `choices[0].message.content`，`aiChat` 已做多通道兼容提取，**换模型时不要单侧改提取逻辑**
+- **提示词/JSON 提取是单一来源**：`shared/ai-prompts.mjs`（aiSystemPrompt/aiSuggestPrompt/dateContext）与 `shared/ai-utils.mjs`（extractJson）由本地脚本 `scripts/scheduled-generate.mjs` 和云端 `server/utils/daily-generate.ts` 共用，**改提示词只改共享文件，不要在任一侧复制**；云端构建时 rollup 会把 shared/ 内联打包进 Worker（已验证）
 
 ## 十、目录结构
 

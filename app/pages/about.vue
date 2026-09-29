@@ -55,11 +55,11 @@ useHead({
       <h2>联系与合作</h2>
       <p>友链、内容合作、侵权反馈：<a href="mailto:wcbblll@126.com">wcbblll@126.com</a>（工作日回复）</p>
 
-      <h2>友链</h2>
+      <!-- <h2>友链</h2>
       <p class="friend-line">
         <a href="https://jdjdndn.github.io" target="_blank" rel="noopener">jdjdndn.github.io</a> ·
         <a href="https://wcbblll.cc" target="_blank" rel="noopener">wcbblll.cc</a>
-      </p>
+      </p> -->
     </div>
   </div>
 </template>

@@ -6,7 +6,7 @@ import { articles } from '../../../db/schema'
 import { checkArticleSafety } from '../../../utils/content-safety'
 import { buildLinkStatements } from '../../../utils/links'
 import { purgeArticle } from '../../../utils/cache'
-import { firstImageOf, safeJson } from '../../../utils/content'
+import { firstImageOf, safeJson, normalizeJson } from '../../../utils/content'
 
 // PUT /api/admin/articles/:id（Bearer 鉴权） —— 修改文章（整篇覆盖，表单回填）
 export default defineEventHandler(async (event) => {
@@ -65,11 +65,3 @@ export default defineEventHandler(async (event) => {
 
   return { id, ok: true, safetyHits }
 })
-
-function normalizeJson(v: any): string | null {
-  if (v == null || v === '') return '[]'
-  if (typeof v === 'string') {
-    try { return JSON.stringify(JSON.parse(v)) } catch { return null }
-  }
-  try { return JSON.stringify(v) } catch { return null }
-}

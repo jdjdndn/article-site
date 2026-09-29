@@ -4,7 +4,7 @@ import { useDb } from '../../../utils/db'
 import { articles } from '../../../db/schema'
 import { checkArticleSafety } from '../../../utils/content-safety'
 import { buildLinkStatements } from '../../../utils/links'
-import { firstImageOf, safeJson } from '../../../utils/content'
+import { firstImageOf, safeJson, normalizeJson } from '../../../utils/content'
 
 // POST /api/admin/articles（Bearer 鉴权） —— 手动新增文章（表单 → JSON → 入库）
 export default defineEventHandler(async (event) => {
@@ -67,11 +67,3 @@ export default defineEventHandler(async (event) => {
 
   return { id, ok: true, safetyHits }
 })
-
-function normalizeJson(v: any): string | null {
-  if (v == null || v === '') return '[]'
-  if (typeof v === 'string') {
-    try { return JSON.stringify(JSON.parse(v)) } catch { return null }
-  }
-  try { return JSON.stringify(v) } catch { return null }
-}

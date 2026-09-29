@@ -5,6 +5,15 @@ export function safeJson(s: string | null, fallback: any = []): any {
   try { return JSON.parse(s) } catch { return fallback }
 }
 
+// JSON 字段归一化：任意值 → 紧凑 JSON 字符串（非法 JSON 返回 null）；空 → '[]'
+export function normalizeJson(v: any): string | null {
+  if (v == null || v === '') return '[]'
+  if (typeof v === 'string') {
+    try { return JSON.stringify(JSON.parse(v)) } catch { return null }
+  }
+  try { return JSON.stringify(v) } catch { return null }
+}
+
 // 从 content 块数组提取第一个 image 块 URL（无图返回 ''）
 export function firstImageOf(content: any): string {
   if (!Array.isArray(content)) return ''
