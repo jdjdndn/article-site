@@ -42,10 +42,10 @@ import { SITE_CATEGORIES } from './config/site'
           </nav>
         </div>
         <div class="friend-links">
-          <a href="https://jdjdndn.github.io" target="_blank" rel="noopener">jdjdndn.github.io</a>
-          <a href="https://wcbblll.cc" target="_blank" rel="noopener">wcbblll.cc</a>
-          <a href="https://www.wcbblll.cc" target="_blank" rel="noopener">www.wcbblll.cc</a>
-          <a href="https://sy.wcbblll.cc" target="_blank" rel="noopener">sy.wcbblll.cc</a>
+          <a href="https://jdjdndn.github.io" target="_blank" rel="noopener">券宝</a>
+          <a href="https://wcbblll.cc" target="_blank" rel="noopener">聚合站</a>
+          <a href="https://www.wcbblll.cc" target="_blank" rel="noopener">AI文章站</a>
+          <a href="https://sy.wcbblll.cc" target="_blank" rel="noopener">小生意</a>
         </div>
       </div>
     </footer>
