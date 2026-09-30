@@ -53,7 +53,7 @@ useHead({
       </ul>
 
       <h2>联系与合作</h2>
-      <p>友链、内容合作、侵权反馈：<a href="mailto:wcbblll@126.com">wcbblll@126.com</a>（工作日回复）</p>
+      <p>友链、内容合作、侵权反馈：<a href="mailto:2667389861@qq.com">2667389861@qq.com</a>（工作日回复）</p>
 
       <!-- <h2>友链</h2>
       <p class="friend-line">
