@@ -2,7 +2,7 @@ import { and, eq, gte, ne, sql } from 'drizzle-orm'
 import { useDb } from './db'
 import { articles, runLogs } from '../db/schema'
 import { fetchPendingSeeds, insertSeedsDirect, markSeedDone, markSeedFailed, batchCreateArticlesDirect, insertRunLog } from './pipeline'
-import { aiSystemPrompt, aiSuggestPrompt } from '../../shared/ai-prompts.mjs'
+import { aiSystemPrompt, aiSuggestPrompt, applyLinkPool } from '../../shared/ai-prompts.mjs'
 import { extractJson } from '../../shared/ai-utils.mjs'
 
 // 云端兜底流水线（B 方案）：
@@ -198,16 +198,18 @@ export async function runDailyGenerate(opts: { forceWindow?: boolean; forceQuota
     ])
     const a = extractJson(text)
     if (!a) throw new Error('AI 返回无法解析为 JSON')
+    // 链接池解析：AI 只输出 ref/id，URL 由 links-data.json 提供；池外链接丢弃
+    const a2 = applyLinkPool(a)
     const item = {
-      title: String(a.title || '').trim(),
-      summary: String(a.summary || ''),
-      content: Array.isArray(a.content) ? a.content : [],
-      template: ['deal', 'guide', 'faq'].includes(a.template) ? a.template : (s.template && s.template !== 'auto' ? s.template : 'deal'),
-      category: s.category && s.category !== 'auto' ? s.category : (a.category || '优惠'),
-      tags: Array.isArray(a.tags) ? a.tags : [],
-      faq: Array.isArray(a.faq) ? a.faq : [],
-      links: Array.isArray(a.links) ? a.links : [],
-      expiresAt: a.expiresAt || s.expiresAt || null,
+      title: String(a2.title || '').trim(),
+      summary: String(a2.summary || ''),
+      content: Array.isArray(a2.content) ? a2.content : [],
+      template: ['deal', 'guide', 'faq'].includes(a2.template) ? a2.template : (s.template && s.template !== 'auto' ? s.template : 'deal'),
+      category: s.category && s.category !== 'auto' ? s.category : (a2.category || '优惠'),
+      tags: Array.isArray(a2.tags) ? a2.tags : [],
+      faq: Array.isArray(a2.faq) ? a2.faq : [],
+      links: Array.isArray(a2.links) ? a2.links : [],
+      expiresAt: a2.expiresAt || s.expiresAt || null,
       publishAt: s.publishAt || null,
       status: s.publishAt ? 'draft' : 'published',
     }

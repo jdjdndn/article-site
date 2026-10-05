@@ -15,7 +15,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { aiSystemPrompt, aiSuggestPrompt } from '../shared/ai-prompts.mjs'
+import { aiSystemPrompt, aiSuggestPrompt, applyLinkPool } from '../shared/ai-prompts.mjs'
 import { extractJson } from '../shared/ai-utils.mjs'
 
 const __dir = path.dirname(fileURLToPath(import.meta.url))
@@ -222,7 +222,9 @@ async function main() {
     }
     try {
       log(`[#${s.id}] AI 生成中…`)
-      const a = await aiGenerate(raw)
+      const aRaw = await aiGenerate(raw)
+      // 链接池解析：AI 只输出 ref/id，URL 由 links-data.json 提供；池外链接丢弃
+      const a = applyLinkPool(aRaw)
       // 自动分类：素材显式指定优先，否则用 AI 判断结果
       const category = s.category && s.category !== 'auto' ? s.category : (a.category || '优惠')
       const template = s.template && s.template !== 'auto' ? s.template : (a.template || 'deal')
