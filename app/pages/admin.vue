@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { SITE_CATEGORIES } from '../config/site'
+import { aiSystemPrompt, applyLinkPool } from '#shared/ai-prompts.mjs'
 import { reactive, ref, computed } from 'vue'
 
 // 管理密钥：仅存 sessionStorage，请求统一走 Authorization: Bearer
@@ -185,7 +186,7 @@ async function runAi() {
       body: {
         model: aiModel.value,
         messages: [
-          { role: 'system', content: aiSystemPrompt(form.template) },
+          { role: 'system', content: aiSystemPrompt() },
           { role: 'user', content: `原始信息：\n${JSON.stringify(raw, null, 2)}` },
         ],
         stream: false,
@@ -194,14 +195,16 @@ async function runAi() {
     const text = res?.choices?.[0]?.message?.content || ''
     const parsed = extractJson(text)
     if (!parsed) throw new Error('AI 返回内容无法解析为 JSON')
+    // 链接池解析：AI 只输出 ref/id，URL 由 links-data.json 提供；池外链接丢弃
+    const resolved = applyLinkPool(parsed)
     // 回填（仅覆盖 AI 负责的字段，分类/状态/过期时间保留人工选择）
-    if (typeof parsed.title === 'string' && parsed.title.trim()) form.title = parsed.title.trim()
-    if (typeof parsed.summary === 'string') form.summary = parsed.summary
-    if (Array.isArray(parsed.content)) form.content = JSON.stringify(parsed.content, null, 2)
-    if (Array.isArray(parsed.links)) form.links = JSON.stringify(parsed.links, null, 2)
-    if (Array.isArray(parsed.tags)) form.tags = JSON.stringify(parsed.tags, null, 2)
-    if (Array.isArray(parsed.faq)) form.faq = JSON.stringify(parsed.faq, null, 2)
-    if (parsed.expiresAt && typeof parsed.expiresAt === 'string') form.expiresAt = parsed.expiresAt
+    if (typeof resolved.title === 'string' && resolved.title.trim()) form.title = resolved.title.trim()
+    if (typeof resolved.summary === 'string') form.summary = resolved.summary
+    if (Array.isArray(resolved.content)) form.content = JSON.stringify(resolved.content, null, 2)
+    if (Array.isArray(resolved.links)) form.links = JSON.stringify(resolved.links, null, 2)
+    if (Array.isArray(resolved.tags)) form.tags = JSON.stringify(resolved.tags, null, 2)
+    if (Array.isArray(resolved.faq)) form.faq = JSON.stringify(resolved.faq, null, 2)
+    if (resolved.expiresAt && typeof resolved.expiresAt === 'string') form.expiresAt = resolved.expiresAt
     syncLinkList()
     if (!validateForm()) throw new Error('AI 生成的 JSON 校验未通过，请人工检查')
     aiPanel.value = false
@@ -221,23 +224,6 @@ function extractJson(text: string): any {
   if (mc) { try { return JSON.parse(mc[1].trim()) } catch { /* fallthrough */ } }
   return null
 }
-// AI 系统提示词（引流文方向：干货主体 + 软文链接；单篇完善 / 批量流水线共用）
-function aiSystemPrompt(_tmpl: string): string {
-  return `你是中文内容编辑，专职把原始素材写成"引流文"——以攻略、经验、干货、教程为主体，让读者觉得有用、愿意读完，再自然带出跳转链接（软文），不要写成硬邦邦的商品广告清单。
-用户会给你一条或多条原始信息（可能凌乱、信息不全、有错别字）。请完成四件事：
-1) 去 AI 味：自然口语化，删掉"首先/其次/值得一提的是/总的来说"等套话，避免对仗排比、每段首句总起的机器结构，多用短句和"你"；
-2) 干货组织：把素材扩写成有实际阅读价值的内容——攻略给步骤/避坑/对比，资讯给背景/要点/判断，问答贴近真实提问。可合理补充常识性建议，但不要编造参数、疗效、承诺或不存在的事实；
-3) 自动分类：从 ["优惠","攻略","好物","副业"] 中选最合适的 category；从 ["guide","faq","default"] 中选 template（操作攻略→guide、答疑→faq、资讯/经验→default）。只有素材是纯商品清单（价格+卖点+链接）才选 "deal" 并按"选购攻略"写；
-4) 结构化输出：只输出一个 JSON 对象（不要多余文字、不要 markdown 代码块），schema 如下：
-{"title":"标题（18字内，突出价值点而非价格）","summary":"一句话摘要（突出能帮读者解决什么）","category":"优惠/攻略/好物/副业之一","template":"guide/faq/default/deal之一","content":[块对象],"tags":["标签1","标签2","标签3"],"faq":[{"q":"常见问题","a":"简短回答"}],"links":[{"label":"按钮文字","url":"https://..."}]}
-可用块对象类型：text（段落，字段 text）/ h2（小标题，字段 text）/ list（要点列表，字段 items:[]）/ quote（提示框，字段 text,tone:"warn"|"info"）/ ad（软文块，字段 label,text,link?）/ price（价格卡，仅 deal 用）/ image（网络图片，字段 url,alt?,caption?）/ video（网络视频，字段 url,title?）。
-内容要求：template 为 guide → 至少 2 个 h2、步骤化 list、含避坑点；faq → text 段落为主、faq 至少 3 条且口语化；default → 2-3 个 text 段落 + 可 1 个 h2 + 1 个 list；deal → 选购攻略式（怎么选、适合谁、注意事项）+ 1 个 price 块 + 1 个 ad 软文块。文章结尾放 1 个 ad 软文块（label 如"去看看"，link 用素材里给的跳转链接；素材无链接就不放 ad）。
-links 保留素材给的全部跳转链接（label 可用"去看看/了解详情"等，不要堆"领券/抢购"这类带货词）。tags 3-5 个，faq 2-4 条。
-过期时间：引流文不写 expiresAt（攻略/经验类文章不过期）；仅当素材含明确的限时信息（如"活动截止 10 月 31 日"）才写 expiresAt。
-图片与视频：一律使用网络资源 URL（素材里给的图片/视频链接优先），渲染时标注来源网络；素材没有相关 URL 时**绝不编造图片或视频地址**（编造的死链会直接损坏阅读体验），宁可不放图也不放假链接。
-合规红线：禁止出现"最/第一/全网唯一/绝无仅有/百分百/绝对"等极限词与绝对化承诺，禁止夸大功效、编造用户评价或虚假折扣信息；涉及价格只写素材里有的，不做"保价/最低价"承诺；不涉及医疗功效、金融收益、赌博、违禁品、运营商号卡套餐等高风险内容。`
-}
-
 // —— 批量录入流水线：粘贴 → 切分 → AI 逐条生成 → 勾选 → 批量入库 ——
 const batchMode = ref(false)
 const batchBusy = ref(false)
@@ -300,7 +286,7 @@ async function runBatchAi() {
         body: {
           model: aiModel.value,
           messages: [
-            { role: 'system', content: aiSystemPrompt(batchTemplate.value) },
+            { role: 'system', content: aiSystemPrompt() },
             { role: 'user', content: `原始信息：\n${it.raw}` },
           ],
           stream: false,
@@ -309,7 +295,8 @@ async function runBatchAi() {
       const text = res?.choices?.[0]?.message?.content || ''
       const parsed = extractJson(text)
       if (!parsed) throw new Error('AI 返回无法解析为 JSON')
-      it.generated = { ...parsed, category: batchCategory.value, template: batchTemplate.value }
+      // 链接池解析：AI 只输出 ref/id，URL 由 links-data.json 提供；池外链接丢弃
+      it.generated = { ...applyLinkPool(parsed), category: batchCategory.value, template: batchTemplate.value }
       it.state = 'done'
       batchLog.value += `✅ ${k + 1}/${total} ${parsed.title || '(无标题)'}\n`
     } catch (e: any) {
