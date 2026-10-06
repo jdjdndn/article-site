@@ -7,7 +7,8 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "prebuild": "node rebuild-all.cjs --prebuild article-site"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.3",

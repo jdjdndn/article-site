@@ -4,7 +4,11 @@
   "main": "./.output/server/index.mjs",
   "assets": {
     "directory": "./.output/public",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    // 未命中静态资源的请求一律交给 User Worker（Nuxt SSR）；
+    // 不使用 "404-page"/"single-page-application"，避免 Asset Worker 把
+    // Nuxt error.vue 返回的真实 404 状态码替换成 200 静态页（软 404）。
+    "not_found_handling": "none"
   },
   "d1_databases": [
     {
