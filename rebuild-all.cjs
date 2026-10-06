@@ -267,6 +267,14 @@ if (optSite || optPrebuild) {
     console.error(`[error] 未找到站点：${names.join(', ')}。可用站点见 --list。`);
     process.exit(2);
   }
+  // standalone/CI 克隆：detectRoot 得到的 ROOT 下不存在 monorepo 路径（如 号卡/ksj），
+  // 但脚本目录本身就是站点（含 wrangler.jsonc）时，回退用脚本目录，避免校验路径落空报 0/1
+  const scriptDir = path.dirname(__filename);
+  for (const s of sites) {
+    if (!fs.existsSync(s.dir) && fs.existsSync(path.join(scriptDir, 'wrangler.jsonc'))) {
+      s.dir = scriptDir;
+    }
+  }
 }
 if (optSkip) {
   const names = optSkip.split(',').map((s) => s.trim());
