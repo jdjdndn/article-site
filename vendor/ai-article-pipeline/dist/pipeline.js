@@ -25,41 +25,6 @@ function sanitizeLinks(arr) {
         .filter((l) => l != null && typeof l === 'object' && typeof l.url === 'string' && !!cleanUrl(l.url))
         .map((l) => ({ label: String(l.label || ''), url: cleanUrl(l.url) }));
 }
-// 清理 text 字段里的 markdown 占位链接：[文字](https://example.com/...) -> 去掉链接部分
-function cleanInlineText(text) {
-    if (typeof text !== 'string')
-        return text;
-    return text
-        .replace(/\s*\[[^\]]*\]\(https?:\/\/[^)]*(?:example\.(com|org|net)|test\.com|yourlink\.com|yourdomain\.com|sample\.com)[^)]*\)/gi, '')
-        .replace(/https?:\/\/(?:www\.)?(?:example\.(com|org|net)|test\.com|yourlink\.com|yourdomain\.com|sample\.com)[^\s)]*/gi, '')
-        .trim();
-}
-// 纯文本清洗：去 HTML 标签、去 markdown 残留（text 块不支持 markdown 渲染）
-function stripHtmlAndMarkdown(text) {
-    if (typeof text !== 'string')
-        return text;
-    return text
-        .replace(/<[^>]+>/g, '')           // HTML 标签
-        .replace(/\*\*([^*]+)\*\*/g, '$1')  // **bold**
-        .replace(/\*([^*]+)\*/g, '$1')      // *italic*
-        .replace(/`([^`]+)`/g, '$1')       // `code`
-        .replace(/^#{1,6}\s+/gm, '')       // 行首 # 标题标记
-        .replace(/\s+/g, ' ')              // 多余空白合并
-        .trim();
-}
-// 连续重复块合并：AI 有时输出两个完全相同的 text 块
-function dedupeBlocks(blocks) {
-    const out = [];
-    for (const b of blocks) {
-        const prev = out[out.length - 1];
-        if (prev && b && b.type === 'text' && prev.type === 'text'
-            && String(b.text).trim() === String(prev.text).trim() && b.text) {
-            continue;
-        }
-        out.push(b);
-    }
-    return out;
-}
 function sanitizeBlocks(blocks) {
     return blocks
         .map((b) => {
@@ -72,52 +37,9 @@ function sanitizeBlocks(blocks) {
         if ((b.type === 'image' || b.type === 'video') && typeof b.url === 'string' && !cleanUrl(b.url)) {
             return null;
         }
-        // 清理 text/h2/quote/ad 正文里的占位链接 + HTML/markdown 残留
-        if (typeof b.text === 'string') {
-            b.text = stripHtmlAndMarkdown(cleanInlineText(b.text));
-            if (!b.text && (b.type === 'text' || b.type === 'h2' || b.type === 'quote')) {
-                return null;
-            }
-        }
         return b;
     })
         .filter((b) => b !== null);
-}
-// 标题截断：SEO title 建议 ≤28 个汉字
-function truncateTitle(title) {
-    const s = String(title || '').trim();
-    if (s.length <= 28)
-        return s;
-    return s.slice(0, 27).replace(/[，。、；：\s]*$/, '') + '…';
-}
-// tags 去重 + 限 5 个
-function sanitizeTags(tags) {
-    if (!Array.isArray(tags))
-        return [];
-    return [...new Set(tags.map((t) => String(t || '').trim()).filter(Boolean))].slice(0, 5);
-}
-// 摘要兜底：AI 漏 summary 时从第一个 text 块截取
-function ensureSummary(article) {
-    if (article.summary && article.summary.trim())
-        return;
-    const firstText = (article.content || []).find((b) => b?.type === 'text' && typeof b.text === 'string');
-    if (firstText) {
-        const s = firstText.text.replace(/\s+/g, ' ').trim();
-        article.summary = s.length > 80 ? s.slice(0, 79) + '…' : s;
-    }
-}
-// FAQ 去重（按 q）
-function dedupeFaq(faq) {
-    if (!Array.isArray(faq))
-        return [];
-    const seen = new Set();
-    return faq.filter((f) => {
-        const q = String(f?.q || '').trim();
-        if (!q || seen.has(q))
-            return false;
-        seen.add(q);
-        return true;
-    });
 }
 // —— 默认 AI 客户端（OpenAI 兼容 HTTP）——
 function createDefaultAiClient(config) {
@@ -239,17 +161,11 @@ function createPipeline(db, config = {}) {
         if (item.content.length < 3 || contentChars < 250) {
             throw new Error(`AI 内容过短（${item.content.length} 块 / ${contentChars} 字），请重试`);
         }
-        // URL 清洗 + 内容净化
+        // URL 清洗
         if (sanitizeUrls) {
             item.links = sanitizeLinks(item.links);
             item.content = sanitizeBlocks(item.content);
         }
-        // 统一净化
-        item.title = truncateTitle(item.title);
-        item.tags = sanitizeTags(item.tags);
-        item.faq = dedupeFaq(item.faq);
-        item.content = dedupeBlocks(item.content);
-        ensureSummary(item);
         return item;
     }
     // —— 内容安全处理 ——

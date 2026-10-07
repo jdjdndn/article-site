@@ -10,6 +10,12 @@ exports.safeJson = safeJson;
 exports.normalizeJson = normalizeJson;
 exports.firstImageOf = firstImageOf;
 exports.normalizeContentBlocks = normalizeContentBlocks;
+exports.escapeHtml = escapeHtml;
+exports.generateToc = generateToc;
+exports.readingTime = readingTime;
+exports.renderBlock = renderBlock;
+exports.renderArticleBlocks = renderArticleBlocks;
+exports.renderArticleCta = renderArticleCta;
 // —— JSON 提取（容忍 markdown 代码块包裹 / 前后多余文字）——
 /** 从候选字段中取第一个非空字符串（空串不能短路，否则会丢掉后面的真实内容） */
 function firstNonEmpty(...vals) {
@@ -337,56 +343,13 @@ function normalizeContentBlocks(raw) {
     }
     return out;
 }
-
-// —— 文章行数据归一化（API 返回时用）——
-function flattenToStrings(arr) {
-    if (!Array.isArray(arr)) return [];
-    return arr
-        .map((t) => {
-        if (typeof t === 'string') return t;
-        if (t && typeof t === 'object') return String(t.text ?? t.name ?? t.label ?? t.value ?? '');
-        return String(t ?? '');
-    })
-        .filter(Boolean);
-}
-function flattenFaq(arr) {
-    if (!Array.isArray(arr)) return [];
-    return arr
-        .map((f) => ({
-        q: typeof f?.q === 'string' ? f.q : String(f?.q?.text ?? f?.q ?? ''),
-        a: typeof f?.a === 'string' ? f.a : String(f?.a?.text ?? f?.a ?? ''),
-    }))
-        .filter((f) => f.q || f.a);
-}
-function flattenLinks(arr) {
-    if (!Array.isArray(arr)) return [];
-    return arr
-        .map((l) => ({
-        label: typeof l?.label === 'string' ? l.label : String(l?.label?.text ?? l?.label ?? ''),
-        url: typeof l?.url === 'string' ? l.url : String(l?.url ?? ''),
-    }))
-        .filter((l) => l.url);
-}
-/** 安全解析文章行：JSON 字段解析 + content 块归一化 + 嵌套对象拍平 */
-function safeArticle(row) {
-    if (!row) return row;
-    return {
-        ...row,
-        content: normalizeContentBlocks(safeJson(row.content)),
-        tags: flattenToStrings(safeJson(row.tags)),
-        faq: flattenFaq(safeJson(row.faq)),
-        links: flattenLinks(safeJson(row.links)),
-        friendLinks: flattenLinks(safeJson(row.friendLinks)),
-        relatedIds: flattenToStrings(safeJson(row.relatedIds)),
-    };
-}
-
 // ============================================================
-// 前端渲染：blocks → HTML 字符串（各 Nuxt 站 v-html 调用）
-// class 名与现有 article 页面 CSS 兼容
+// 前端渲染：blocks → HTML 字符串（Nuxt v-html 调用）
 // ============================================================
+/** HTML 转义，防 XSS */
 function escapeHtml(v) {
-    if (v == null) return '';
+    if (v == null)
+        return '';
     return String(v)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -394,33 +357,41 @@ function escapeHtml(v) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 }
-/** 从 blocks 提取 h2 生成 TOC 目录（≥3 个 h2 才输出） */
+/** 从 blocks 提取 h2 生成 TOC 目录（≥3 个 h2 才输出），用 <details> 小屏折叠 */
 function generateToc(blocks) {
-    if (!Array.isArray(blocks)) return '';
+    if (!Array.isArray(blocks))
+        return '';
     const headings = blocks
         .filter((b) => b?.type === 'h2' && typeof b.text === 'string' && b.text.trim())
         .map((b, i) => ({ text: b.text.trim(), id: `h2-${i}` }));
-    if (headings.length < 3) return '';
+    if (headings.length < 3)
+        return '';
     return `<details class="article-toc"><summary class="toc-title">本文目录</summary><ul>` +
         headings.map((h) => `<li><a href="#${h.id}">${escapeHtml(h.text)}</a></li>`).join('') +
         `</ul></details>`;
 }
-/** 估算阅读时长（按中文 300 字/分钟） */
+/** 估算阅读时长（中文 300 字/分钟），返回分钟数 */
 function readingTime(blocks) {
-    if (!Array.isArray(blocks)) return 0;
+    if (!Array.isArray(blocks))
+        return 0;
     let chars = 0;
     for (const b of blocks) {
-        if (typeof b?.text === 'string') chars += b.text.length;
-        if (Array.isArray(b?.items)) b.items.forEach((i) => { if (typeof i === 'string') chars += i.length; });
+        if (typeof b?.text === 'string')
+            chars += b.text.length;
+        if (Array.isArray(b?.items)) {
+            b.items.forEach((i) => { if (typeof i === 'string')
+                chars += i.length; });
+        }
     }
     return Math.max(1, Math.round(chars / 300));
 }
 /** 渲染单个 block 为 HTML 字符串 */
-function renderBlock(block, h2Index = { i: 0 }) {
-    if (!block || typeof block !== 'object') return '';
+function renderBlock(block, h2Idx) {
+    if (!block || typeof block !== 'object')
+        return '';
     switch (block.type) {
         case 'h2': {
-            const id = `h2-${h2Index.i++}`;
+            const id = `h2-${h2Idx.i++}`;
             return `<h2 id="${id}" class="block-h2">${escapeHtml(block.text)}</h2>`;
         }
         case 'text':
@@ -429,11 +400,13 @@ function renderBlock(block, h2Index = { i: 0 }) {
             return `<div class="block-list">${(block.items || [])
                 .map((item) => `<p class="list-item">${escapeHtml(item)}</p>`)
                 .join('')}</div>`;
-        case 'price':
-            return `<div class="block-price"><span class="price">¥${escapeHtml(block.price)}</span>` +
-                (block.original ? `<span class="original">¥${escapeHtml(block.original)}</span>` : '') +
-                (block.spec ? `<span class="spec">${escapeHtml(block.spec)}</span>` : '') +
+        case 'price': {
+            const p = block;
+            return `<div class="block-price"><span class="price">¥${escapeHtml(p.price ?? p.name)}</span>` +
+                (p.original ? `<span class="original">¥${escapeHtml(p.original)}</span>` : '') +
+                (p.spec ? `<span class="spec">${escapeHtml(p.spec)}</span>` : '') +
                 `</div>`;
+        }
         case 'quote':
             return `<div class="block-quote ${block.tone === 'warn' ? 'warn' : 'info'}">${escapeHtml(block.text)}</div>`;
         case 'image':
@@ -448,9 +421,10 @@ function renderBlock(block, h2Index = { i: 0 }) {
             return '';
     }
 }
-/** 渲染整个 content blocks 数组为 HTML 字符串（自动加 TOC + 阅读时长） */
+/** 渲染整个 content blocks 数组为 HTML 字符串（自动加 TOC） */
 function renderArticleBlocks(blocks) {
-    if (!Array.isArray(blocks)) return '';
+    if (!Array.isArray(blocks))
+        return '';
     const h2Idx = { i: 0 };
     const body = blocks.map((b) => renderBlock(b, h2Idx)).join('');
     const toc = generateToc(blocks);
