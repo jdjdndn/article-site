@@ -95,6 +95,14 @@ function detectRoot(startDir) {
 }
 const ROOT = optRoot ? path.resolve(optRoot) : detectRoot(path.dirname(__filename));
 
+// CI 环境检测：Cloudflare Workers CI 只 clone 当前项目，没有 monorepo 其他站点。
+// --prebuild 模式下如果找不到完整 monorepo，直接跳过（exit 0），不报错。
+const isMonorepo = ['wcbblll_cc', 'article-site', 'github.io'].every((m) => fs.existsSync(path.join(ROOT, m)));
+if (optPrebuild && !isMonorepo) {
+  console.log(`[prebuild] CI/standalone 环境，跳过重建（ROOT=${ROOT} 不是完整 monorepo）`);
+  process.exit(0);
+}
+
 // ---------- 站点定义（内置默认；sites.json 存在时以它为准） ----------
 const P = (...s) => path.join(ROOT, ...s);
 const chk = (desc, type, file, pattern, min) => ({ desc, type, file, pattern, min });
