@@ -4,7 +4,7 @@ import { articles, runLogs } from '../db/schema'
 import { fetchPendingSeeds, insertSeedsDirect, markSeedDone, markSeedFailed, batchCreateArticlesDirect, insertRunLog } from './pipeline'
 import { aiSystemPrompt, aiSuggestPrompt, applyLinkPool } from '../../shared/ai-prompts.mjs'
 import { extractJson } from '../../shared/ai-utils.mjs'
-import { createPipeline, extractResponse, type PipelineDB } from 'ai-article-pipeline'
+import { createPipeline, extractResponse, createOpenRouterClient, OPENROUTER_FREE_MODELS, type PipelineDB } from 'ai-article-pipeline'
 
 // 云端兜底流水线（B 方案）：
 // - 本地 8:00 任务失败 / 电脑关机时，由 */5 cron 在窗口内轮询自动补生成；
@@ -35,10 +35,13 @@ const log = (...a: any[]) => console.log(new Date().toISOString(), '[daily-gener
 // 云端 AI 服务不可用（额度/模型类错误）：本轮窗口放弃，不再空转重试
 class AiFatalError extends Error {}
 
-// 适配 Cloudflare Workers AI 为 auto-ai-article 的 AiClient 接口
+// 适配 Cloudflare Workers AI 为 auto-ai-article 的 AiClient 接口（CF 失败自动降级 OpenRouter）
 async function createWorkersAiClient(): Promise<(messages: Array<{ role: string; content: string }>) => Promise<string>> {
   const ai: any = (process.env as any).AI
   if (!ai) throw new AiFatalError('AI binding 未配置（云端兜底需在 wrangler.jsonc 配置 Workers AI binding）')
+  // OpenRouter 兜底：CF binding 额度/限流/模型类错误时降级；无 key 则不启用
+  const openRouterKey: string | undefined = (globalThis as any).__env__?.OPENROUTER_API_KEY || (process.env as any).OPENROUTER_API_KEY
+  const openRouter = openRouterKey ? createOpenRouterClient({ apiKey: openRouterKey, models: OPENROUTER_FREE_MODELS }) : null
 
   return async (messages) => {
     try {
@@ -48,8 +51,16 @@ async function createWorkersAiClient(): Promise<(messages: Array<{ role: string;
       return extractResponse(out)
     } catch (e: any) {
       const m = String(e?.message || e || '')
-      if (/limit|quota|429|not\s*\.?\s*found|model|AI|credit/i.test(m)) throw new AiFatalError(m)
-      throw e
+      if (!/limit|quota|429|not\s*\.?\s*found|model|AI|credit/i.test(m)) throw e
+      if (!openRouter) throw new AiFatalError(m)
+      try {
+        log(`CF 模型 ${MODEL} 失败（${m}），降级 OpenRouter`)
+        return await openRouter(messages as any)
+      } catch (fe: any) {
+        // OpenRouter 兜底也失败：抛原 CF 错误，保留 AiFatalError 语义供上层记录
+        log('OpenRouter 兜底失败:', fe?.message || fe)
+        throw new AiFatalError(m)
+      }
     }
   }
 }
