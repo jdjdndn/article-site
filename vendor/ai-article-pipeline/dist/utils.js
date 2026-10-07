@@ -394,12 +394,35 @@ function escapeHtml(v) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 }
+/** 从 blocks 提取 h2 生成 TOC 目录（≥3 个 h2 才输出） */
+function generateToc(blocks) {
+    if (!Array.isArray(blocks)) return '';
+    const headings = blocks
+        .filter((b) => b?.type === 'h2' && typeof b.text === 'string' && b.text.trim())
+        .map((b, i) => ({ text: b.text.trim(), id: `h2-${i}` }));
+    if (headings.length < 3) return '';
+    return `<nav class="article-toc"><span class="toc-title">本文目录</span><ul>` +
+        headings.map((h) => `<li><a href="#${h.id}">${escapeHtml(h.text)}</a></li>`).join('') +
+        `</ul></nav>`;
+}
+/** 估算阅读时长（按中文 300 字/分钟） */
+function readingTime(blocks) {
+    if (!Array.isArray(blocks)) return 0;
+    let chars = 0;
+    for (const b of blocks) {
+        if (typeof b?.text === 'string') chars += b.text.length;
+        if (Array.isArray(b?.items)) b.items.forEach((i) => { if (typeof i === 'string') chars += i.length; });
+    }
+    return Math.max(1, Math.round(chars / 300));
+}
 /** 渲染单个 block 为 HTML 字符串 */
-function renderBlock(block) {
+function renderBlock(block, h2Index = { i: 0 }) {
     if (!block || typeof block !== 'object') return '';
     switch (block.type) {
-        case 'h2':
-            return `<h2 class="block-h2">${escapeHtml(block.text)}</h2>`;
+        case 'h2': {
+            const id = `h2-${h2Index.i++}`;
+            return `<h2 id="${id}" class="block-h2">${escapeHtml(block.text)}</h2>`;
+        }
         case 'text':
             return `<p class="text-block">${escapeHtml(block.text)}</p>`;
         case 'list':
@@ -425,10 +448,13 @@ function renderBlock(block) {
             return '';
     }
 }
-/** 渲染整个 content blocks 数组为 HTML 字符串 */
+/** 渲染整个 content blocks 数组为 HTML 字符串（自动加 TOC + 阅读时长） */
 function renderArticleBlocks(blocks) {
     if (!Array.isArray(blocks)) return '';
-    return blocks.map(renderBlock).join('');
+    const h2Idx = { i: 0 };
+    const body = blocks.map((b) => renderBlock(b, h2Idx)).join('');
+    const toc = generateToc(blocks);
+    return toc + body;
 }
 /** 渲染底部 CTA 卡片 HTML */
 function renderArticleCta(siteConfig) {
