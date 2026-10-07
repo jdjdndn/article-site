@@ -4,12 +4,22 @@ import { articles, runLogs } from '../db/schema'
 import { fetchPendingSeeds, insertSeedsDirect, markSeedDone, markSeedFailed, batchCreateArticlesDirect, insertRunLog } from './pipeline'
 import { aiSystemPrompt, aiSuggestPrompt, applyLinkPool } from '../../shared/ai-prompts.mjs'
 import { extractJson } from '../../shared/ai-utils.mjs'
+import { createPipeline, extractResponse, type PipelineDB } from 'ai-article-pipeline'
 
 // 云端兜底流水线（B 方案）：
 // - 本地 8:00 任务失败 / 电脑关机时，由 */5 cron 在窗口内轮询自动补生成；
 // - 与本地脚本共用线上业务逻辑（seeds 入池 / 文章入库含安全审核 / run-logs 上报），
 //   仅 AI 来源不同：Cloudflare Workers AI 开源模型（零成本、不依赖本地网关）。
 // - 提示词与 scripts/scheduled-generate.mjs 保持同步（勿单侧修改）。
+//
+// 库复用（auto-ai-article → npm file:../auto-ai-article）：
+// - createPipeline：AI 选题（suggestTopics，带重试 + JSON 解析）
+// - extractJson：JSON 提取（经 shared/ai-utils.mjs re-export）
+// - checkArticleSafety：内容安全（经 batchCreateArticlesDirect 调用，经 utils/content-safety.ts re-export）
+// article-site 特有逻辑保留：
+// - 兜底窗口 / [ai-down] 标记 / hasLocalRunToday / 日志清理
+// - 链接池 applyLinkPool（AI 输出 ref，URL 由 links-data.json 解析）
+// - publishAt 定时发布 + needsReview + 链接表入库（batchCreateArticlesDirect）
 //
 // 重要：不能通过公网域名 https://www.wcbblll.cc 调用自身 API —— Cloudflare 对
 // Worker fetch 自身 custom domain 返回 404 空响应（防自调用/循环保护），因此改为
@@ -22,33 +32,25 @@ const WINDOW_END_MIN = 120 // UTC 02:00 = 北京 10:00
 
 const log = (...a: any[]) => console.log(new Date().toISOString(), '[daily-generate]', ...a)
 
-// 提示词（aiSystemPrompt / aiSuggestPrompt / dateContext）统一来自 shared/ai-prompts.mjs，
-// JSON 提取（extractJson）来自 shared/ai-utils.mjs——与本地脚本共用单一来源，修改只改共享文件。
-
 // 云端 AI 服务不可用（额度/模型类错误）：本轮窗口放弃，不再空转重试
 class AiFatalError extends Error {}
 
-async function aiChat(messages: { role: string; content: string }[]): Promise<string> {
+// 适配 Cloudflare Workers AI 为 auto-ai-article 的 AiClient 接口
+async function createWorkersAiClient(): Promise<(messages: Array<{ role: string; content: string }>) => Promise<string>> {
   const ai: any = (process.env as any).AI
   if (!ai) throw new AiFatalError('AI binding 未配置（云端兜底需在 wrangler.jsonc 配置 Workers AI binding）')
-  try {
-    const out: any = await ai.run(MODEL, { messages, max_tokens: 4096 })
-    // Workers AI 不同模型返回结构不同，多通道兼容：
-    //   chat 模型 → { result: { response } }（Llama 3.3）
-    //   OpenAI 兼容 → { result: { choices: [{ message: { content } }] } }（Qwen3）
-    //   旧 instruct → { response } / { text }
-    const text =
-      out?.result?.choices?.[0]?.message?.content ??
-      out?.choices?.[0]?.message?.content ??
-      out?.result?.response ??
-      out?.response ??
-      out?.text ??
-      ''
-    return String(text)
-  } catch (e: any) {
-    const m = String(e?.message || e || '')
-    if (/limit|quota|429|not\s*\.?\s*found|model|AI|credit/i.test(m)) throw new AiFatalError(m)
-    throw e
+
+  return async (messages) => {
+    try {
+      const out: any = await ai.run(MODEL, { messages, max_tokens: 4096 })
+      // Workers AI 不同模型返回结构不同，多通道兼容 —— 复用库的 extractResponse
+      // （覆盖 result.choices / result.response / 顶层 choices/response/text 等格式）
+      return extractResponse(out)
+    } catch (e: any) {
+      const m = String(e?.message || e || '')
+      if (/limit|quota|429|not\s*\.?\s*found|model|AI|credit/i.test(m)) throw new AiFatalError(m)
+      throw e
+    }
   }
 }
 
@@ -93,21 +95,6 @@ async function hasAiDownToday(): Promise<boolean> {
   return rows.length > 0
 }
 
-async function aiSuggestTopics(): Promise<{ title: string; angle: string; category: string }[]> {
-  const text = await aiChat([
-    { role: 'system', content: aiSuggestPrompt() },
-    { role: 'user', content: '请输出 3 个选题 JSON 数组。' },
-  ])
-  const parsed = extractJson(text)
-  let arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.topics) ? parsed.topics : null)
-  if (!arr || !arr.length) throw new Error('AI 选题返回空数组')
-  return arr.slice(0, 3).map((x: any) => ({
-    title: String(x.title || '').trim(),
-    angle: String(x.angle || '').trim(),
-    category: ['优惠', '攻略', '好物', '副业'].includes(x.category) ? x.category : 'auto',
-  }))
-}
-
 // 日志定期清理（90 天前；每天窗口内幂等执行——90 天前数据删空后 DELETE 0 行，零成本）
 async function cleanupOldLogs() {
   const db = useDb()
@@ -145,12 +132,47 @@ export async function runDailyGenerate(opts: { forceWindow?: boolean; forceQuota
       return { skipped: 'ai-down' }
     }
   }
+
   log(`当天已发布 ${done}/${TARGET} 篇，开始兜底（模型 ${MODEL}）`)
+  let aiClient: (messages: Array<{ role: string; content: string }>) => Promise<string>
+  try {
+    aiClient = await createWorkersAiClient()
+  } catch (e: any) {
+    if (e instanceof AiFatalError) {
+      const msg = `[ai-down] ${e.message}，当天窗口放弃`
+      try {
+        await insertRunLog(db, { runAt: new Date().toISOString(), model: MODEL, dryRun: false, total: 0, ok: 0, fail: 1, error: msg.slice(0, 200) })
+      } catch { /* noop */ }
+      log(msg)
+      return { skipped: 'ai-down' }
+    }
+    throw e
+  }
+
+  // 库管线：仅用 suggestTopics（AI 选题，带重试）；生成/入库走 article-site 特有流程
+  // （链接池 applyLinkPool + publishAt 定时发布 + needsReview + 链接表，库的 GeneratedArticle 不透传 publishAt）
+  const pipelineDB: PipelineDB = {
+    async fetchPendingSeeds() { return [] },
+    async insertSeeds() { return { added: 0 } },
+    async markSeedDone() {},
+    async markSeedFailed() {},
+    async insertArticles() { return { total: 0, created: 0, failed: 0, results: [] } },
+    async insertRunLog() {},
+  }
+  const pipeline = createPipeline(pipelineDB, {
+    target: TARGET,
+    ai: { client: aiClient, model: MODEL },
+    systemPrompt: aiSystemPrompt(),
+    suggestPrompt: aiSuggestPrompt(),
+    sanitizeUrls: false, // 链接池模式：AI 输出 ref 而非 URL，不走占位 URL 清洗
+    safetyAction: 'draft',
+  })
+
   let list = await fetchPendingSeeds(db, 10)
   const have = list?.length || 0
   if (have < TARGET) {
     try {
-      const topics = await aiSuggestTopics()
+      const topics = await pipeline.suggestTopics()
       if (topics.length) {
         const r = await insertSeedsDirect(
           db,
@@ -192,7 +214,7 @@ export async function runDailyGenerate(opts: { forceWindow?: boolean; forceQuota
       await markSeedFailed(db, s.id, '素材过短').catch(() => {})
       throw new Error('素材过短')
     }
-    const text = await aiChat([
+    const text = await aiClient([
       { role: 'system', content: aiSystemPrompt() },
       { role: 'user', content: `原始信息：\n${JSON.stringify(raw)}` },
     ])

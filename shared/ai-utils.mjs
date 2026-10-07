@@ -1,18 +1,8 @@
-// AI 工具函数单一来源（本地脚本 scripts/scheduled-generate.mjs 与云端 server/utils/daily-generate.ts 共用）
+// AI 工具函数 — 复用 auto-ai-article 库（npm file:../auto-ai-article）
+// extractJson 从库 re-export；本地脚本与云端 server 共用同一实现，修改只改库。
 
-// 从模型输出文本中提取 JSON（容忍 markdown 代码块包裹 / 前后多余文字）
-export function extractJson(text) {
-  if (typeof text !== 'string') return null
-  const t = text.trim()
-  try { return JSON.parse(t) } catch { /* fallthrough */ }
-  const mc = t.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (mc) {
-    try { return JSON.parse(mc[1].trim()) } catch { /* fallthrough */ }
-  }
-  const start = t.indexOf('{')
-  const end = t.lastIndexOf('}')
-  if (start >= 0 && end > start) {
-    try { return JSON.parse(t.slice(start, end + 1)) } catch { /* fallthrough */ }
-  }
-  return null
-}
+import { createRequire } from 'node:module'
+const require = createRequire(import.meta.url)
+const { extractJson } = require('ai-article-pipeline')
+
+export { extractJson }

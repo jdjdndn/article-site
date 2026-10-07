@@ -1,25 +1,8 @@
-// 内容工具：JSON 字段解析 + 首图提取（列表/收藏接口共用，避免各接口重复实现）
-
-export function safeJson(s: string | null, fallback: any = []): any {
-  if (!s) return fallback
-  try { return JSON.parse(s) } catch { return fallback }
-}
-
-// JSON 字段归一化：任意值 → 紧凑 JSON 字符串（非法 JSON 返回 null）；空 → '[]'
-export function normalizeJson(v: any): string | null {
-  if (v == null || v === '') return '[]'
-  if (typeof v === 'string') {
-    try { return JSON.stringify(JSON.parse(v)) } catch { return null }
-  }
-  try { return JSON.stringify(v) } catch { return null }
-}
-
-// 从 content 块数组提取第一个 image 块 URL（无图返回 ''）
-export function firstImageOf(content: any): string {
-  if (!Array.isArray(content)) return ''
-  const b = content.find((x: any) => x?.type === 'image' && x?.url)
-  return b?.url || ''
-}
+// 内容工具 — 复用 auto-ai-article 库（npm file:../auto-ai-article）
+// safeJson / normalizeJson / firstImageOf 与库一致，从库 re-export；
+// toListItem 为 article-site 列表输出特有逻辑，保留本地。
+export { safeJson, normalizeJson, firstImageOf } from 'ai-article-pipeline'
+import { firstImageOf, safeJson } from 'ai-article-pipeline'
 
 // 行记录 → 列表输出（优先 first_image 列，旧数据无列值时退回解析 content）
 export function toListItem(r: any): any {
