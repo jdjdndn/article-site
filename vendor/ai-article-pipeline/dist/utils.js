@@ -401,9 +401,9 @@ function generateToc(blocks) {
         .filter((b) => b?.type === 'h2' && typeof b.text === 'string' && b.text.trim())
         .map((b, i) => ({ text: b.text.trim(), id: `h2-${i}` }));
     if (headings.length < 3) return '';
-    return `<nav class="article-toc"><span class="toc-title">本文目录</span><ul>` +
+    return `<details class="article-toc"><summary class="toc-title">本文目录</summary><ul>` +
         headings.map((h) => `<li><a href="#${h.id}">${escapeHtml(h.text)}</a></li>`).join('') +
-        `</ul></nav>`;
+        `</ul></details>`;
 }
 /** 估算阅读时长（按中文 300 字/分钟） */
 function readingTime(blocks) {

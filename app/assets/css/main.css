@@ -1,4 +1,4 @@
-/* 全局基础样式（大屏/小屏自适应）
+﻿/* 全局基础样式（大屏/小屏自适应）
    设计变量：主色蓝 #2563eb、页面底色浅蓝灰、卡片白、圆角 14px、柔和阴影 */
 :root {
   --primary: #2563eb;
@@ -96,17 +96,18 @@ img { max-width: 100%; }
   background: var(--primary-weak, #eff6ff);
   border: 1px solid #dbeafe;
   border-radius: 10px;
-  padding: 14px 18px;
+  padding: 12px 16px;
   margin-bottom: 20px;
   font-size: 14px;
 }
 .article-toc .toc-title {
   font-weight: 600;
   color: var(--text);
-  display: block;
-  margin-bottom: 8px;
+  cursor: pointer;
+  list-style: none;
 }
-.article-toc ul { list-style: none; padding: 0; margin: 0; }
+.article-toc .toc-title::-webkit-details-marker { display: none; }
+.article-toc ul { list-style: none; padding: 0; margin: 8px 0 0; }
 .article-toc li { padding: 3px 0; }
 .article-toc a {
   color: var(--primary);
@@ -115,3 +116,19 @@ img { max-width: 100%; }
 }
 .article-toc a:hover { text-decoration: underline; }
 .block-h2 { scroll-margin-top: 80px; }
+
+/* 桌面端（≥768px）：目录默认展开，去掉折叠箭头 */
+@media (min-width: 768px) {
+  .article-toc ul { display: block; }
+  .article-toc .toc-title::after { content: none; }
+}
+/* 小屏（<768px）：折叠态，summary 右侧加 ▸ 提示可展开 */
+@media (max-width: 767px) {
+  .article-toc .toc-title::after {
+    content: '▸';
+    float: right;
+    transition: transform .2s;
+  }
+  .article-toc[open] .toc-title::after { transform: rotate(90deg); }
+}
+
