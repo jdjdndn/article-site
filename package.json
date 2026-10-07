@@ -8,7 +8,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "prebuild": "node rebuild-all.cjs --prebuild article-site"
+    "prebuild": "node vendor/seo-optimizer/rebuild-all.cjs --prebuild article-site"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.3",
