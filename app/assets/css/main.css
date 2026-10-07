@@ -90,3 +90,28 @@ img { max-width: 100%; }
   color: var(--text);
 }
 .input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
+
+/* 文章目录（renderArticleBlocks 输出的 v-html 用） */
+.article-toc {
+  background: var(--primary-weak, #eff6ff);
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+.article-toc .toc-title {
+  font-weight: 600;
+  color: var(--text);
+  display: block;
+  margin-bottom: 8px;
+}
+.article-toc ul { list-style: none; padding: 0; margin: 0; }
+.article-toc li { padding: 3px 0; }
+.article-toc a {
+  color: var(--primary);
+  text-decoration: none;
+  line-height: 1.5;
+}
+.article-toc a:hover { text-decoration: underline; }
+.block-h2 { scroll-margin-top: 80px; }
