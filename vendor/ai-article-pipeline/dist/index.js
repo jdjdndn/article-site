@@ -30,6 +30,12 @@ Object.defineProperty(exports, "safeArticle", { enumerable: true, get: function 
 Object.defineProperty(exports, "renderBlock", { enumerable: true, get: function () { return utils_js_1.renderBlock; } });
 Object.defineProperty(exports, "renderArticleBlocks", { enumerable: true, get: function () { return utils_js_1.renderArticleBlocks; } });
 Object.defineProperty(exports, "renderArticleCta", { enumerable: true, get: function () { return utils_js_1.renderArticleCta; } });
+// 素材采集
+var sources_js_1 = require("./sources.js");
+Object.defineProperty(exports, "fetchRssFeed", { enumerable: true, get: function () { return sources_js_1.fetchRssFeed; } });
+Object.defineProperty(exports, "extractArticleText", { enumerable: true, get: function () { return sources_js_1.extractArticleText; } });
+Object.defineProperty(exports, "textSimilarity", { enumerable: true, get: function () { return sources_js_1.textSimilarity; } });
+Object.defineProperty(exports, "normalizeText", { enumerable: true, get: function () { return sources_js_1.normalizeText; } });
 // 内容安全
 var content_safety_js_1 = require("./content-safety.js");
 Object.defineProperty(exports, "scanText", { enumerable: true, get: function () { return content_safety_js_1.scanText; } });
