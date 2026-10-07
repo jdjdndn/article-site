@@ -3,11 +3,10 @@ export default defineNuxtConfig({
   compatibilityDate: '2026-09-27',
   devtools: { enabled: true },
 
-  // Cloudflare Workers（module worker，原生支持 scheduled 事件 → cron 定时发布）
+  // Cloudflare Workers（使用 durable preset 支持 Durable Object Alarms）
+  // 定时改由 server/plugins/durable-alarm.ts 挂 cloudflare:durable:* hook 实现（替代原 */5 cron）
   nitro: {
-    preset: 'cloudflare_module',
-    // 定时发布由 server/plugins/publish-on-schedule.ts 挂 cloudflare:scheduled hook 实现
-    // （Nitro scheduledTasks 在 cloudflare_module preset 下未生效，已弃用）
+    preset: 'cloudflare-durable',
   },
 
   // 边缘缓存分层（资源节约核心：内容站读多写少，命中即零 Worker/D1）

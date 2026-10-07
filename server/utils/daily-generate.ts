@@ -4,7 +4,7 @@ import { articles, runLogs } from '../db/schema'
 import { fetchPendingSeeds, insertSeedsDirect, markSeedDone, markSeedFailed, batchCreateArticlesDirect, insertRunLog } from './pipeline'
 import { aiSystemPrompt, aiSuggestPrompt, applyLinkPool } from '../../shared/ai-prompts.mjs'
 import { extractJson } from '../../shared/ai-utils.mjs'
-import { createPipeline, extractResponse, createOpenRouterClient, OPENROUTER_FREE_MODELS, type PipelineDB } from 'ai-article-pipeline'
+import { createPipeline, extractResponse, createOpenRouterClient, getSiteDefaultModel, OPENROUTER_FREE_MODELS, type PipelineDB } from 'ai-article-pipeline'
 
 // 云端兜底流水线（B 方案）：
 // - 本地 8:00 任务失败 / 电脑关机时，由 */5 cron 在窗口内轮询自动补生成；
@@ -25,7 +25,7 @@ import { createPipeline, extractResponse, createOpenRouterClient, OPENROUTER_FRE
 // Worker fetch 自身 custom domain 返回 404 空响应（防自调用/循环保护），因此改为
 // 直连 D1 + 复用 pipeline 业务函数（与 API 行为同构）。
 
-const MODEL = '@cf/qwen/qwen3-30b-a3b-fp8'
+const MODEL = getSiteDefaultModel()
 const TARGET = 3
 const WINDOW_START_MIN = 40 // UTC 00:40 = 北京 08:40（给本地 8:00 任务留足完成时间，压掉并发竞态窗口）
 const WINDOW_END_MIN = 120 // UTC 02:00 = 北京 10:00

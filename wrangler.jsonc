@@ -20,13 +20,18 @@
   "ai": {
     "binding": "AI"
   },
+  "durable_objects": {
+    "bindings": [
+      { "name": "$DurableObject", "class_name": "$DurableObject" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["$DurableObject"] }
+  ],
   "routes": [
     {
       "pattern": "www.wcbblll.cc",
       "custom_domain": true
     }
-  ],
-  "triggers": {
-    "crons": ["*/5 * * * *"]
-  }
+  ]
 }
