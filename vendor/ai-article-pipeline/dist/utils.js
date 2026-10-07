@@ -337,3 +337,46 @@ function normalizeContentBlocks(raw) {
     }
     return out;
 }
+
+// —— 文章行数据归一化（API 返回时用）——
+function flattenToStrings(arr) {
+    if (!Array.isArray(arr)) return [];
+    return arr
+        .map((t) => {
+        if (typeof t === 'string') return t;
+        if (t && typeof t === 'object') return String(t.text ?? t.name ?? t.label ?? t.value ?? '');
+        return String(t ?? '');
+    })
+        .filter(Boolean);
+}
+function flattenFaq(arr) {
+    if (!Array.isArray(arr)) return [];
+    return arr
+        .map((f) => ({
+        q: typeof f?.q === 'string' ? f.q : String(f?.q?.text ?? f?.q ?? ''),
+        a: typeof f?.a === 'string' ? f.a : String(f?.a?.text ?? f?.a ?? ''),
+    }))
+        .filter((f) => f.q || f.a);
+}
+function flattenLinks(arr) {
+    if (!Array.isArray(arr)) return [];
+    return arr
+        .map((l) => ({
+        label: typeof l?.label === 'string' ? l.label : String(l?.label?.text ?? l?.label ?? ''),
+        url: typeof l?.url === 'string' ? l.url : String(l?.url ?? ''),
+    }))
+        .filter((l) => l.url);
+}
+/** 安全解析文章行：JSON 字段解析 + content 块归一化 + 嵌套对象拍平 */
+function safeArticle(row) {
+    if (!row) return row;
+    return {
+        ...row,
+        content: normalizeContentBlocks(safeJson(row.content)),
+        tags: flattenToStrings(safeJson(row.tags)),
+        faq: flattenFaq(safeJson(row.faq)),
+        links: flattenLinks(safeJson(row.links)),
+        friendLinks: flattenLinks(safeJson(row.friendLinks)),
+        relatedIds: flattenToStrings(safeJson(row.relatedIds)),
+    };
+}
