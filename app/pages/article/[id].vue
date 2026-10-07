@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { articleCss } from 'ai-article-pipeline'
+import { articleCss } from 'ai-article-pipeline/client'
 useHead({ style: [{ children: articleCss }] })
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 
