@@ -380,3 +380,67 @@ function safeArticle(row) {
         relatedIds: flattenToStrings(safeJson(row.relatedIds)),
     };
 }
+
+// ============================================================
+// 前端渲染：blocks → HTML 字符串（各 Nuxt 站 v-html 调用）
+// class 名与现有 article 页面 CSS 兼容
+// ============================================================
+function escapeHtml(v) {
+    if (v == null) return '';
+    return String(v)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+/** 渲染单个 block 为 HTML 字符串 */
+function renderBlock(block) {
+    if (!block || typeof block !== 'object') return '';
+    switch (block.type) {
+        case 'h2':
+            return `<h2 class="block-h2">${escapeHtml(block.text)}</h2>`;
+        case 'text':
+            return `<p class="text-block">${escapeHtml(block.text)}</p>`;
+        case 'list':
+            return `<div class="block-list">${(block.items || [])
+                .map((item) => `<p class="list-item">${escapeHtml(item)}</p>`)
+                .join('')}</div>`;
+        case 'price':
+            return `<div class="block-price"><span class="price">¥${escapeHtml(block.price)}</span>` +
+                (block.original ? `<span class="original">¥${escapeHtml(block.original)}</span>` : '') +
+                (block.spec ? `<span class="spec">${escapeHtml(block.spec)}</span>` : '') +
+                `</div>`;
+        case 'quote':
+            return `<div class="block-quote ${block.tone === 'warn' ? 'warn' : 'info'}">${escapeHtml(block.text)}</div>`;
+        case 'image':
+            return `<figure class="block-image"><img src="${escapeHtml(block.url)}" alt="${escapeHtml(block.alt || '')}" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'" />` +
+                `<figcaption>${block.caption ? escapeHtml(block.caption) + ' · ' : ''}图源：网络</figcaption></figure>`;
+        case 'ad':
+            return `<div class="ad-block"><span class="ad-label">${escapeHtml(block.label || '推荐')}</span>` +
+                `<p>${escapeHtml(block.text)}</p>` +
+                (block.link ? `<a href="${escapeHtml(block.link)}" target="_blank" rel="noopener nofollow" class="ad-link">去看看 →</a>` : '') +
+                `</div>`;
+        default:
+            return '';
+    }
+}
+/** 渲染整个 content blocks 数组为 HTML 字符串 */
+function renderArticleBlocks(blocks) {
+    if (!Array.isArray(blocks)) return '';
+    return blocks.map(renderBlock).join('');
+}
+/** 渲染底部 CTA 卡片 HTML */
+function renderArticleCta(siteConfig) {
+    const name = escapeHtml(siteConfig?.name || '');
+    const priceRange = escapeHtml(siteConfig?.priceRange || '');
+    const userUrl = escapeHtml(siteConfig?.userUrl || '#');
+    const agentUrl = escapeHtml(siteConfig?.agentUrl || '#');
+    return `<section class="article-cta card">` +
+        `<h2>想办一张高性价比流量卡？</h2>` +
+        `<p>${name}提供四大运营商号卡套餐，${priceRange}，在线办理快速激活。</p>` +
+        `<div class="cta-actions">` +
+        `<a href="${userUrl}" target="_blank" rel="noopener" class="btn-primary-cta">立即办理号卡</a>` +
+        `<a href="${agentUrl}" target="_blank" rel="noopener" class="btn-secondary-cta">成为代理赚佣金</a>` +
+        `</div></section>`;
+}
