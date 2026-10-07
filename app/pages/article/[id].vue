@@ -1,4 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
+import { articleCss } from 'ai-article-pipeline'
+useHead({ style: [{ children: articleCss }] })
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 
 const route = useRoute()
