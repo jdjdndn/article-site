@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { articleCss } from 'ai-article-pipeline/client'
+import { articleCss, renderArticleBlocks, normalizeContentBlocks } from 'ai-article-pipeline/client'
 useHead({ style: [{ children: articleCss }] })
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 
@@ -26,6 +26,13 @@ const { data, status, error, refresh } = await useFetch(`/api/articles/${id.valu
 if (error.value) {
   throw createError({ statusCode: error.value?.statusCode || 404, statusMessage: error.value?.statusMessage || '文章不存在' })
 }
+
+// 渲染正文 HTML（统一用库的 renderArticleBlocks）
+const renderedHtml = computed(() => {
+  const raw = data.value?.article?.content
+  if (!raw) return ''
+  return renderArticleBlocks(normalizeContentBlocks(raw))
+})
 
 const videoEls: HTMLVideoElement[] = []
 function setVideo(el: any) { if (el && !videoEls.includes(el)) videoEls.push(el) }
@@ -369,46 +376,7 @@ useHead(() => {
           </details>
         </section>
 
-        <template v-for="(block, i) in blocks" :key="i">
-          <div v-if="isAd(block)" class="ad-block">
-            <span class="ad-label">{{ block.label || '广告' }}</span>
-            <p>{{ block.text }}</p>
-            <a v-if="block.link" :href="block.link" target="_blank" rel="noopener nofollow sponsored noreferrer" class="ad-link">去看看 →</a>
-          </div>
-          <h2 v-else-if="isH2(block)" class="block-h2">{{ block.text }}</h2>
-          <div v-else-if="isList(block)" class="block-list">
-            <p v-for="(item, j) in block.items" :key="j" class="list-item">{{ item }}</p>
-          </div>
-          <div v-else-if="isPrice(block)" class="block-price">
-            <span class="price">¥{{ block.price }}</span>
-            <span v-if="block.original" class="original">¥{{ block.original }}</span>
-            <span v-if="block.spec" class="spec">{{ block.spec }}</span>
-          </div>
-          <div v-else-if="isQuote(block)" class="block-quote" :class="block.tone === 'warn' ? 'warn' : 'info'">{{ block.text }}</div>
-          <figure v-else-if="isImage(block)" class="block-image">
-            <img :src="block.url" :alt="block.alt || data.article.title" loading="lazy" referrerpolicy="no-referrer" @error="onImgErr" />
-            <figcaption>{{ block.caption ? block.caption + ' · ' : '' }}图源：网络</figcaption>
-          </figure>
-          <div v-else-if="isVideo(block)" class="block-video">
-            <video
-              v-if="isPlayableUrl(block.url)"
-              :ref="setVideo"
-              :src="block.url"
-              :poster="block.poster || ''"
-              controls
-              playsinline
-            ></video>
-            <a v-else :href="block.url" target="_blank" rel="noopener nofollow sponsored noreferrer" class="video-card">
-              <span class="video-play">▶</span>
-              <span class="video-info">
-                <span class="video-title">{{ block.title || '视频' }}</span>
-                <span class="video-src">来源：网络 · 点击前往观看</span>
-              </span>
-            </a>
-            <p class="video-src-tip">{{ block.title ? block.title + ' · ' : '' }}视频来源：网络</p>
-          </div>
-          <p v-else class="text-block">{{ block.text }}</p>
-        </template>
+        <div v-html="renderedHtml"></div>
 
         <!-- 文末轻引导 -->
         <div class="read-end">
