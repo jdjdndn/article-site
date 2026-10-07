@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { articleCss, renderArticleBlocks, normalizeContentBlocks } from 'ai-article-pipeline/client'
+import { articleCss } from 'ai-article-pipeline/client'
 useHead({ style: [{ children: articleCss }] })
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 
@@ -27,12 +27,6 @@ if (error.value) {
   throw createError({ statusCode: error.value?.statusCode || 404, statusMessage: error.value?.statusMessage || '文章不存在' })
 }
 
-// 渲染正文 HTML
-const renderedHtml = computed(() => {
-  const raw = article.value?.content
-  if (!raw) return ''
-  return renderArticleBlocks(normalizeContentBlocks(raw))
-})
 const videoEls: HTMLVideoElement[] = []
 function setVideo(el: any) { if (el && !videoEls.includes(el)) videoEls.push(el) }
 async function initPlyr() {
