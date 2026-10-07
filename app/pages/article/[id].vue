@@ -1,5 +1,5 @@
-﻿<script setup lang="ts">
-import { articleCss } from 'ai-article-pipeline/client'
+<script setup lang="ts">
+import { articleCss, renderArticleBlocks, normalizeContentBlocks } from 'ai-article-pipeline/client'
 useHead({ style: [{ children: articleCss }] })
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 
@@ -27,72 +27,12 @@ if (error.value) {
   throw createError({ statusCode: error.value?.statusCode || 404, statusMessage: error.value?.statusMessage || '文章不存在' })
 }
 
-// 内容块归一化：容忍 AI 模型输出的块缺 type 字段（如 {"list":{"items":[...]}}），按键名补全 type，
-// 避免整块被渲染逻辑静默丢弃（对历史文章同样生效）
-const blocks = computed<any[]>(() => {
-  const arr: any[] = data.value?.article?.content || []
-  return arr.map((b) => {
-    if (b && typeof b === 'object' && !b.type) {
-      if (Array.isArray(b.list?.items)) return { type: 'list', items: b.list.items }
-      if (typeof b.h2 === 'string') return { type: 'h2', text: b.h2 }
-      if (typeof b.text === 'string') return { type: 'text', text: b.text }
-    }
-    return b
-  })
+// 渲染正文 HTML
+const renderedHtml = computed(() => {
+  const raw = article.value?.content
+  if (!raw) return ''
+  return renderArticleBlocks(normalizeContentBlocks(raw))
 })
-
-const favorited = ref(false)
-const favoriteCount = ref(0)
-
-onMounted(() => {
-  fp.value = getFp()
-  if (fp.value) refresh().then(() => {
-    favorited.value = !!data.value?.favorited
-    favoriteCount.value = data.value?.favoriteCount ?? 0
-  })
-  // Plyr 按需加载：仅当正文存在 video 块时才动态引入（避免无视频页面白拉两个 chunk）
-  const blocks: any[] = data.value?.article?.content || []
-  if (blocks.some((b: any) => b?.type === 'video')) initPlyr()
-  document.addEventListener('keydown', onKeydown)
-})
-onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
-
-// 收藏：loading + 失败可见提示
-const favBusy = ref(false)
-const favMsg = ref('')
-let favMsgTimer: ReturnType<typeof setTimeout> | null = null
-async function toggleFavorite() {
-  if (!fp.value || favBusy.value) return
-  favBusy.value = true
-  const action = favorited.value ? 'remove' : 'add'
-  try {
-    const res = await $fetch(`/api/articles/${id.value}/favorite`, {
-      method: 'POST',
-      body: { fp: fp.value, action },
-    })
-    favorited.value = res.favorited
-    favoriteCount.value = res.count
-    favMsg.value = ''
-  } catch {
-    favMsg.value = action === 'add' ? '收藏失败，请重试' : '取消收藏失败，请重试'
-    if (favMsgTimer) clearTimeout(favMsgTimer)
-    favMsgTimer = setTimeout(() => (favMsg.value = ''), 2500)
-  } finally {
-    favBusy.value = false
-  }
-}
-
-function isAd(block: any) { return block?.type === 'ad' }
-const isH2 = (b: any) => b?.type === 'h2'
-const isList = (b: any) => b?.type === 'list'
-const isPrice = (b: any) => b?.type === 'price'
-const isQuote = (b: any) => b?.type === 'quote'
-const isImage = (b: any) => b?.type === 'image'
-const isVideo = (b: any) => b?.type === 'video'
-// 视频直链判定：mp4/webm/ogg/m4v/m3u8 可内嵌播放；其余（bilibili/抖音页面链接）走卡片跳转
-function isPlayableUrl(u: string) { return /\.(mp4|webm|ogg|m4v)(\?|#|$)/i.test(u || '') }
-// 网络图防盗链/失效时隐藏图片，保留说明文字，避免破图
-function onImgErr(e: Event) { (e.target as HTMLElement).style.display = 'none' }
 const videoEls: HTMLVideoElement[] = []
 function setVideo(el: any) { if (el && !videoEls.includes(el)) videoEls.push(el) }
 async function initPlyr() {
@@ -857,129 +797,7 @@ useHead(() => {
 }
 
 .content { margin-bottom: 22px; padding: 24px;  margin-left: auto; margin-right: auto; }
-.text-block { margin-bottom: 14px; line-height: 1.85; color: #374151; font-size: 15px; }
-.block-h2 {
-  font-size: 18px;
-  margin: 26px 0 12px;
-  padding: 4px 0 8px 12px;
-  border-left: 4px solid var(--primary);
-  border-bottom: 1px solid #f0f2f5;
-  color: var(--text);
-  background: linear-gradient(90deg, var(--primary-weak), transparent);
-  border-radius: 0 6px 6px 0;
-}
-.block-list { margin: 12px 0; }
-.list-item { padding: 6px 0 6px 20px; position: relative; color: #374151; font-size: 14px; }
-.list-item::before { content: '•'; position: absolute; left: 4px; color: var(--primary); font-weight: 700; }
-.block-price {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  background: linear-gradient(135deg, #fff7e6, #fffbe8);
-  border: 1px solid #fde68a;
-  border-radius: 12px;
-  padding: 14px 18px;
-  margin: 16px 0;
-}
-.block-price .price { font-size: 28px; font-weight: 700; color: var(--danger); }
-.block-price .original { color: #b6bcc6; text-decoration: line-through; font-size: 14px; }
-.block-price .spec { color: var(--text-muted); font-size: 13px; }
-.block-quote { border-radius: 10px; padding: 12px 16px; margin: 16px 0; font-size: 14px; line-height: 1.75; }
-.block-quote.warn {
-  background: var(--danger-weak);
-  border: 1px solid #fecaca;
-  color: #b91c1c;
-}
-.block-quote.warn::before {
-  content: '';
-  display: inline-block;
-  width: 15px;
-  height: 15px;
-  margin-right: 6px;
-  vertical-align: -2px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b91c1c' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.5 21 20H3z'/%3E%3Cpath d='M12 10v4.5'/%3E%3Cpath d='M12 17.5h.01'/%3E%3C/svg%3E") center/contain no-repeat;
-}
-.block-quote.info {
-  background: var(--primary-weak);
-  border: 1px solid #bfdbfe;
-  color: #1d4ed8;
-}
-.block-quote.info::before {
-  content: '';
-  display: inline-block;
-  width: 15px;
-  height: 15px;
-  margin-right: 6px;
-  vertical-align: -2px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231d4ed8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18h6M10 21h4'/%3E%3Cpath d='M12 3a6 6 0 0 0-3.6 10.8c.8.6 1.1 1.4 1.1 2.2h5c0-.8.3-1.6 1.1-2.2A6 6 0 0 0 12 3z'/%3E%3C/svg%3E") center/contain no-repeat;
-}
-.block-image { margin: 16px 0; }
-.block-image img {
-  width: 100%;
-  aspect-ratio: 16 / 10;
-  object-fit: cover;
-  border-radius: 12px;
-  display: block;
-  box-shadow: var(--shadow-sm);
-  background: #eef2f7;
-}
-.block-image figcaption { font-size: 12px; color: var(--text-muted); margin-top: 6px; text-align: center; }
-.block-video { margin: 16px 0; }
-.block-video video, .block-video .plyr { width: 100%; border-radius: 12px; display: block; }
-.video-src-tip { font-size: 12px; color: var(--text-muted); margin-top: 6px; text-align: center; }
-.video-card {
-  display: flex; align-items: center; gap: 14px;
-  border: 1px solid var(--border); border-radius: 12px;
-  padding: 14px 16px; text-decoration: none; background: #fff;
-  transition: box-shadow .2s, transform .15s;
-}
-.video-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
-.video-play {
-  width: 44px; height: 44px; flex-shrink: 0;
-  border-radius: 50%; background: linear-gradient(180deg, var(--primary), var(--primary-strong));
-  color: #fff; font-size: 16px; display: flex; align-items: center; justify-content: center;
-}
-.video-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.video-title { font-size: 14px; font-weight: 600; color: var(--text); }
-.video-src { font-size: 12px; color: var(--text-muted); }
-.top-links { margin: 0 0 18px; }
-.read-end {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 14px 16px; margin: 6px 0 18px;
-  background: var(--primary-weak); border-radius: 12px;
-  color: var(--text); font-size: 14px;
-}
-.read-end .end-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: 1px solid var(--border); background: #fff; border-radius: 999px;
-  padding: 5px 14px; font-size: 13px; cursor: pointer; color: var(--text-muted);
-  text-decoration: none; transition: all .2s;
-}
-.read-end .end-btn svg { width: 13px; height: 13px; }
-.read-end .end-btn:disabled { opacity: .6; cursor: wait; }
-.read-end .end-btn:hover { border-color: var(--primary); color: var(--primary); }
-.read-end .end-btn.on { background: var(--primary); color: #fff; border-color: transparent; }
 
-.ad-block {
-  background: #fffbeb;
-  border: 1px dashed #fcd34d;
-  border-radius: 10px;
-  padding: 12px 16px;
-  margin: 12px 0;
-  font-size: 14px;
-}
-.ad-label {
-  display: inline-block;
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  color: #fff;
-  font-size: 11px;
-  padding: 1px 10px;
-  border-radius: 999px;
-  margin-bottom: 6px;
-}
-.ad-link { display: inline-block; margin-top: 6px; font-weight: 600; color: var(--primary); text-decoration: none; }
 
 .faq { margin-bottom: 22px; padding: 20px 24px;  margin-left: auto; margin-right: auto; }
 .faq h2 { font-size: 17px; margin-bottom: 6px; color: var(--text); }
