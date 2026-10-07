@@ -5,6 +5,7 @@
 .nitro
 .cache
 dist
+!vendor/ai-article-pipeline/dist/
 
 # Wrangler local state
 .wrangler
