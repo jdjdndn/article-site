@@ -260,17 +260,18 @@ API `GET /api/admin/stats`（请求头 `Authorization: Bearer <管理密钥>`；
 
 ## 三、免费 AI 网关（token-free-gateway）
 
-把 DeepSeek/豆包/Kimi/ChatGPT/Claude 等 13 家**网页版** AI 包装成 OpenAI 兼容 API，**完全免费**（凭据存本地，浏览器登录态经 CDP 转发，绕反爬）。
+把 DeepSeek/豆包/Kimi/ChatGPT/Claude 等 13 家**网页版** AI 包装成 OpenAI 兼容 API，**完全免费**（凭据存本地 `~/.token-free-gateway/`，浏览器登录态经 CDP 转发，绕反爬）。
 
-- 程序：`E:\code\token-free-gateway\token-free-gateway.exe`（**源码本地构建版**；npm/GitHub 发布版有打包缺陷）
-- 详细说明：`E:\code\token-free-gateway\README.md`
+- 程序（**已 fork 进 auto-ai-article 管理**，2026-10-08）：`E:\code\auto-ai-article\third_party\token-free-gateway\token-free-gateway.exe`
+- 自启脚本：`E:\code\auto-ai-article\third_party\token-free-gateway\auto-start.ps1`（幂等；计划任务 `ArticleSite-AIGateway` 登录时 + 每天 07:50 调用）
+- 详细说明：`E:\code\auto-ai-article\third_party\token-free-gateway\README.md`
 
 ```powershell
 # 1) 启动网关（监听 http://localhost:3456）
-E:\code\token-free-gateway\token-free-gateway.exe start
+E:\code\auto-ai-article\third_party\token-free-gateway\token-free-gateway.exe start
 
 # 2) 授权模型（一次性；DeepSeek 保持聊天页开着）
-E:\code\token-free-gateway\token-free-gateway.exe webauth
+E:\code\auto-ai-article\third_party\token-free-gateway\token-free-gateway.exe webauth
 
 # 3) 验证
 curl http://localhost:3456/v1/models
