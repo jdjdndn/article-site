@@ -26,8 +26,8 @@ const fs = require('fs');
 const path = require('path');
 
 // —— AI 模型/提供方配置：唯一事实源 auto-ai-article/src/ai-config.ts
-//    本文件不手抄任何模型列表，统一引用生成的只读副本（update-ai-config.cjs 生成）——
-const { FREE_TEXT_MODELS, OPENROUTER_FREE_MODELS, FALLBACK_PROVIDERS } = require('./ai-config.generated.cjs');
+//    通过 vendor/ai-article-pipeline 引用（file: 依赖），改模型只改 auto-ai-article 一处
+const { FREE_TEXT_MODELS, OPENROUTER_FREE_MODELS, FALLBACK_PROVIDERS } = require('ai-article-pipeline/ai-config');
 
 // —— 凭证读取 ——
 function cfg() {
@@ -198,20 +198,61 @@ function createUnifiedClient(opts) {
   };
 }
 
-// —— 对问题清单生成修复建议 ——
+// —— AI 建议质量评分（0-100） ——
+function scoreAdvice(advice, issueCount) {
+  let score = 0;
+  const reasons = [];
+  if (/修复|添加|删除|修改|设置|配置|修正|补全|缩短|扩充/.test(advice)) { score += 30; reasons.push('含具体动作'); }
+  else { reasons.push('缺具体动作'); }
+  if (/验证|重跑|确认|检查|部署后/.test(advice)) { score += 20; reasons.push('含验证步骤'); }
+  else { reasons.push('缺验证步骤'); }
+  if (/\.html|\.json|\.js|wrangler|meta|title|link|script|sitemap|viewport|alt|canonical/.test(advice)) { score += 20; reasons.push('引用正确文件/标签'); }
+  else { reasons.push('未引用具体文件'); }
+  const lines = advice.split('\n').filter((l) => l.trim());
+  if (issueCount && lines.length >= issueCount) { score += 15; reasons.push('按问题逐条回复'); }
+  else { reasons.push('未逐条回复'); }
+  if (advice.length >= 80 && advice.length <= 1000) { score += 15; reasons.push('长度合理'); }
+  else { reasons.push('长度异常'); }
+  return { score, reasons };
+}
+
+// —— 对问题清单生成修复建议（模板优先 + AI 降级 + 质量评分） ——
 async function auditIssues(issues, opts) {
   const o = opts || {};
+  const all = issues || [];
+
+  // 1. 模板匹配（零成本确定性诊断）
+  const { classifyIssues } = require('./issue-templates.cjs');
+  const classified = classifyIssues(all.slice(0, o.limit || 10));
+  const templated = classified.filter((i) => i.template);
+  const unmatched = classified.filter((i) => !i.template);
+
+  const result = {
+    enabled: true,
+    templated: templated.map((i) => ({ site: i.site, type: i.type, actual: i.actual, fix: i.template.fix, verify: i.template.verify })),
+    unmatchedCount: unmatched.length,
+  };
+
+  // 2. 未匹配问题调 AI 生成建议
+  if (!unmatched.length) {
+    return Object.assign(result, { advice: null, note: '全部问题已由模板匹配，无需 AI 诊断' });
+  }
+
   const c = cfg();
   const anyConfigured = (c.apiToken && c.accountId) || FALLBACK_PROVIDERS.some((p) => process.env[p.envKey]);
   if (!anyConfigured) {
-    return { enabled: false, note: '未配置 AI 凭证（CF 或备用提供方 key），AI 审计跳过（不影响巡检）' };
+    return Object.assign(result, { advice: null, note: '未配置 AI 凭证，未匹配问题跳过 AI 诊断（不影响巡检）' });
   }
-  const prompt = `你是 SEO 工程师。以下是一次多站点 SEO 巡检发现的问题（9 字段：site/type/severity/expect/actual/fixSource），请针对每条给出：可能根因、具体修复动作、修复后如何验证。用中文，简洁分点，每条不超过 80 字。\n\n${JSON.stringify((issues || []).slice(0, o.limit || 10), null, 2)}`;
+
+  const prompt = `你是 SEO 工程师。以下是 SEO 巡检发现的问题，请针对每条给出：可能根因、具体修复动作、修复后如何验证。用中文，简洁分点，每条不超过 80 字。\n\n${JSON.stringify(unmatched, null, 2)}`;
   const messages = [{ role: 'user', content: prompt }];
   const client = createUnifiedClient(o);
   const r = await client(messages);
-  if (r.ok) return { enabled: true, provider: r.provider, model: r.model, advice: r.content };
-  return { enabled: true, model: null, note: r.note };
+  if (r.ok) {
+    const quality = scoreAdvice(r.content, unmatched.length);
+    return Object.assign(result, { provider: r.provider, model: r.model, advice: r.content, quality });
+  }
+  return Object.assign(result, { advice: null, note: r.note });
 }
 
-module.exports = { auditIssues, FREE_TEXT_MODELS, cfg, createUnifiedClient, classifyError, extractResponse };
+module.exports = { auditIssues, scoreAdvice, FREE_TEXT_MODELS, cfg, createUnifiedClient, classifyError, extractResponse };
