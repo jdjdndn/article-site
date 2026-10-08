@@ -1,13 +1,17 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   compatibilityDate: '2026-09-27',
-  devtools: { enabled: true },
+  devtools: { enabled: false },
 
   // Cloudflare Workers（使用 durable preset 支持 Durable Object Alarms）
   // 定时改由 server/plugins/durable-alarm.ts 挂 cloudflare:durable:* hook 实现（替代原 */5 cron）
   nitro: {
     preset: 'cloudflare-durable',
+    sourcemap: false,
   },
+
+  // 关闭 source map 加速 build
+  sourcemap: { server: false, client: false },
 
   // 边缘缓存分层（资源节约核心：内容站读多写少，命中即零 Worker/D1）
   // - 详情页 s-maxage=300（文章极少变；后台保存/删除/批量链接操作时 Cache API 定点 purge）
