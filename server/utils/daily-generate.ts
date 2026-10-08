@@ -4,7 +4,8 @@ import { articles, runLogs } from '../db/schema'
 import { fetchPendingSeeds, insertSeedsDirect, markSeedDone, markSeedFailed, batchCreateArticlesDirect, insertRunLog } from './pipeline'
 import { aiSystemPrompt, aiSuggestPrompt, applyLinkPool } from '../../shared/ai-prompts.mjs'
 import { extractJson } from '../../shared/ai-utils.mjs'
-import { createPipeline, extractResponse, createOpenRouterClient, getSiteDefaultModel, OPENROUTER_FREE_MODELS, type PipelineDB } from 'ai-article-pipeline'
+import { createPipeline, extractResponse, createOpenRouterClient, getSiteDefaultModel, OPENROUTER_FREE_MODELS, cnTodayStartISO, type PipelineDB } from 'ai-article-pipeline'
+import { runPublishOnSchedule } from './publish-on-schedule'
 
 // 云端兜底流水线（B 方案）：
 // - 本地 8:00 任务失败 / 电脑关机时，由 */5 cron 在窗口内轮询自动补生成；
@@ -67,8 +68,8 @@ async function createWorkersAiClient(): Promise<(messages: Array<{ role: string;
 
 async function publishedTodayCount(): Promise<number> {
   const db = useDb()
-  const todayCN = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10)
-  const from = todayCN + 'T00:00:00.000Z'
+  // 北京时间今天 0 点（UTC 前一天 16:00）——正确日界，草稿发布（updatedAt 更新）也计入
+  const from = cnTodayStartISO()
   const rows = await db
     .select({ id: articles.id })
     .from(articles)
@@ -83,8 +84,7 @@ async function publishedTodayCount(): Promise<number> {
 // （本地网关离线转云端时脚本上报 ok=0，不影响本判定。）
 async function hasLocalRunToday(): Promise<boolean> {
   const db = useDb()
-  const todayCN = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10)
-  const from = todayCN + 'T00:00:00.000Z'
+  const from = cnTodayStartISO()
   const rows = await db
     .select({ id: runLogs.id, ok: runLogs.ok })
     .from(runLogs)
@@ -96,8 +96,7 @@ async function hasLocalRunToday(): Promise<boolean> {
 // 今天是否已标记"云端 AI 服务不可用"（额度/模型故障 → 窗口剩余轮次跳过，避免空转）
 async function hasAiDownToday(): Promise<boolean> {
   const db = useDb()
-  const todayCN = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10)
-  const from = todayCN + 'T00:00:00.000Z'
+  const from = cnTodayStartISO()
   const rows = await db
     .select({ id: runLogs.id })
     .from(runLogs)
@@ -124,6 +123,9 @@ export async function runDailyGenerate(opts: { forceWindow?: boolean; forceQuota
     log('不在兜底窗口（北京 08:25-10:00），跳过')
     return { skipped: 'window' }
   }
+  // 优先发草稿：先发布到期草稿（手动触发路径未经过 alarm onAlarm，需在此补齐；
+  // alarm 路径幂等重复执行无碍），发布数计入下方 done（updatedAt 口径）
+  try { await runPublishOnSchedule() } catch (e: any) { log('发布到期草稿失败：', e.message) }
   // 日志表定期清理（点击/搜索/运行/已处理反馈，90 天前）
   try { await cleanupOldLogs() } catch (e: any) { log('日志清理失败：', e.message) }
   const done = await publishedTodayCount()
@@ -144,7 +146,7 @@ export async function runDailyGenerate(opts: { forceWindow?: boolean; forceQuota
     }
   }
 
-  log(`当天已发布 ${done}/${TARGET} 篇，开始兜底（模型 ${MODEL}）`)
+  log(`当天已发布 ${done}/${TARGET} 篇，剩余 ${Math.max(0, TARGET - done)} 篇由生成补足（模型 ${MODEL}）`)
   let aiClient: (messages: Array<{ role: string; content: string }>) => Promise<string>
   try {
     aiClient = await createWorkersAiClient()
@@ -171,7 +173,7 @@ export async function runDailyGenerate(opts: { forceWindow?: boolean; forceQuota
     async insertRunLog() {},
   }
   const pipeline = createPipeline(pipelineDB, {
-    target: TARGET,
+    target: Math.max(0, TARGET - done),
     ai: { client: aiClient, model: MODEL },
     systemPrompt: aiSystemPrompt(),
     suggestPrompt: aiSuggestPrompt(),
@@ -179,9 +181,10 @@ export async function runDailyGenerate(opts: { forceWindow?: boolean; forceQuota
     safetyAction: 'draft',
   })
 
+  const need = Math.max(0, TARGET - done) // 剩余目标：到目标数即可，不足才补
   let list = await fetchPendingSeeds(db, 10)
   const have = list?.length || 0
-  if (have < TARGET) {
+  if (have < need) {
     try {
       const topics = await pipeline.suggestTopics()
       if (topics.length) {
@@ -218,7 +221,7 @@ export async function runDailyGenerate(opts: { forceWindow?: boolean; forceQuota
     list = list.filter((s: any) => !s.articleId)
     log(`清理 ${linked.length} 条已关联文章的残留 pending 素材`)
   }
-  const targets = list.slice(0, TARGET)
+  const targets = list.slice(0, need)
   const results = await Promise.allSettled(targets.map(async (s: any) => {
     const raw = String(s.raw || '')
     if (raw.length < 8) {

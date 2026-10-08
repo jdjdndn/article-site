@@ -3,6 +3,7 @@ import { eq, and, sql, desc } from 'drizzle-orm'
 import { useDb } from '../../utils/db'
 import { articles, favorites } from '../../db/schema'
 import { getArticleLinks } from '../../utils/links'
+import { computeRelatedArticles } from 'ai-article-pipeline'
 
 // GET /api/articles/:id
 // 返回完整文章 + 有效链接（links 独立表，active 且未过期）+ related + 收藏状态
@@ -58,17 +59,32 @@ export default defineEventHandler(async (event) => {
   } catch { /* related_ids 解析失败则走兜底 */ }
 
   if (!related.length) {
-    related = await db
-      .select({ id: articles.id, title: articles.title, summary: articles.summary })
+    // 相关文章公共能力（库 computeRelatedArticles）：相似（分类/tags/文本）+ 互补（同分类不同角度）评分
+    // 候选池 = 最近发布的 30 篇已发布文章（含同分类与跨分类），评分排序取前 6
+    const candRows = await db
+      .select({ id: articles.id, title: articles.title, summary: articles.summary, category: articles.category, tags: articles.tags })
       .from(articles)
       .where(and(
-        eq(articles.category, article.category),
         eq(articles.status, 'published'),
         sql`id != ${article.id}`,
         sql`(expires_at IS NULL OR datetime(expires_at) > datetime('now'))`,
       ))
       .orderBy(desc(articles.updatedAt))
-      .limit(6)
+      .limit(30)
+    const ids = computeRelatedArticles(
+      { title: article.title, summary: article.summary, category: article.category, tags: safeJson(article.tags) },
+      candRows.map((r: any) => ({ id: r.id, title: r.title, summary: r.summary, category: r.category, tags: safeJson(r.tags) })),
+      { limit: 6 },
+    )
+    if (ids.length) {
+      const rows = await db
+        .select({ id: articles.id, title: articles.title, summary: articles.summary })
+        .from(articles)
+        .where(and(sql`id IN (${ids})`, eq(articles.status, 'published')))
+        .limit(6)
+      const byId = new Map(rows.map((x) => [x.id, x]))
+      related = ids.map((i: string) => byId.get(i)).filter(Boolean)
+    }
   }
 
   // 有效链接（独立表）
