@@ -145,10 +145,30 @@ async function main() {
   // 预检：本地 AI 网关在线 → 走本地全流程（DeepSeek 高质量）；离线 → 整轮转云端兜底
   // （Workers AI 跑完整流程：选题→生成→入库→防重，不做本地一段+云端一段的接力）
   let localAi = false
-  try {
-    const probe = await fetch(`${TFG}/models`, { signal: AbortSignal.timeout(10000) })
-    localAi = probe.ok
-  } catch { localAi = false }
+  const probeGateway = async (timeoutMs = 10000) => {
+    try {
+      const probe = await fetch(`${TFG}/models`, { signal: AbortSignal.timeout(timeoutMs) })
+      return probe.ok
+    } catch { return false }
+  }
+  localAi = await probeGateway()
+  if (!localAi) {
+    // 自愈：网关守护进程可能已退出（浏览器关闭/进程被杀等），先尝试拉起再重探测，
+    // 避免 07:50 自启失败后 08:00 发文整轮转云端兜底。auto-start.ps1 幂等（探测+启动）。
+    log('[auto] 本地 AI 网关离线，尝试自动拉起（auto-start.ps1）…')
+    try {
+      const { execFile } = await import('node:child_process')
+      const { promisify } = await import('node:util')
+      const run = promisify(execFile)
+      await run('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(ROOT, '..', 'token-free-gateway', 'auto-start.ps1')], { timeout: 30000, windowsHide: true })
+        .catch((e) => log('[auto] 拉起命令异常（忽略，继续重探测）：', e.message))
+    } catch (e) { log('[auto] 拉起失败（忽略）：', e.message) }
+    for (let i = 0; i < 9 && !localAi; i++) {
+      await new Promise((r) => setTimeout(r, 5000))
+      localAi = await probeGateway(5000)
+    }
+    if (localAi) log('[auto] 网关自动拉起成功，继续本地流程')
+  }
   if (!localAi) {
     if (dryRun) {
       log('[auto] 本地 AI 网关(localhost:3456)离线，dry-run 不转云端（避免预览误入库），请先启动网关')
