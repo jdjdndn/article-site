@@ -106,7 +106,8 @@ import { SITE_CATEGORIES } from './config/site'
   box-shadow: 0 2px 8px rgba(37, 99, 235, .35);
 }
 
-.nav { display: flex; align-items: center; gap: 4px; }
+.nav { display: flex; align-items: center; gap: 4px; flex: 1; justify-content: flex-end; overflow-x: auto; scrollbar-width: none; }
+.nav::-webkit-scrollbar { display: none; }
 .nav-link {
   display: inline-flex;
   align-items: center;
@@ -117,6 +118,7 @@ import { SITE_CATEGORIES } from './config/site'
   text-decoration: none;
   font-size: 14px;
   line-height: 1;
+  flex-shrink: 0;
   transition: color .2s, background .2s, box-shadow .2s;
 }
 .nav-link svg { width: 15px; height: 15px; opacity: .85; }
@@ -165,10 +167,16 @@ main { flex: 1; padding: 28px 0 48px; }
 @media (max-width: 600px) {
   .header-inner { height: 54px; gap: 8px; }
   .footer-inner { flex-direction: column; align-items: flex-start; gap: 8px; }
-  .logo { font-size: 17px; gap: 6px; }
+  .logo { font-size: 17px; gap: 6px; flex-shrink: 0; }
   .logo-badge { width: 26px; height: 26px; font-size: 13px; border-radius: 8px; }
   .nav { gap: 2px; }
   .nav-link { padding: 6px 10px; font-size: 13px; gap: 4px; }
   .nav-link svg { width: 14px; height: 14px; }
+}
+
+@media (max-width: 380px) {
+  .nav-link span { display: none; }
+  .nav-link { padding: 8px 12px; min-width: 40px; justify-content: center; }
+  .nav-link svg { width: 18px; height: 18px; }
 }
 </style>

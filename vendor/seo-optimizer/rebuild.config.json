@@ -141,6 +141,10 @@
   {
     "name": "github.io",
     "dir": "E:\\code\\github.io",
+    "sourceMap": {
+      "dist/index.html": ["src/index.html", "src/App.vue", "src/views/Home.vue"],
+      "dist/404.html": ["src/views/NotFound.vue", "src/index.html"]
+    },
     "build": [
       "npm",
       [
@@ -245,6 +249,11 @@
         "pattern": "\"404-page\""
       }
     ],
+    "sourceMap": {
+      "web/dist/index.html": ["web/index.html", "web/src/App.vue", "web/src/views/Home.vue"],
+      "web/dist/404.html": ["web/src/views/NotFound.vue", "web/index.html"],
+      "web/dist/sitemap.xml": ["web/vite.config.js", "web/src/router.js"]
+    },
     "onlineBase": "https://sy.wcbblll.cc"
   },
   {
