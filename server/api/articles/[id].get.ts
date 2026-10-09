@@ -3,6 +3,7 @@ import { eq, and, sql, desc } from 'drizzle-orm'
 import { useDb } from '../../utils/db'
 import { articles, favorites } from '../../db/schema'
 import { getArticleLinks } from '../../utils/links'
+import { readArticleContent } from '../../utils/r2'
 import { computeRelatedArticles } from 'ai-article-pipeline'
 
 // GET /api/articles/:id
@@ -36,11 +37,14 @@ export default defineEventHandler(async (event) => {
     favorited = !!mine
   }
 
+  // R2 正文（content/friendLinks/faq/relatedIds）—— 提前读取，related_ids 依赖它
+  const r2Body = await readArticleContent(id).catch(() => null)
+
   // 相关文章：related_ids 优先 → 同分类兜底
-  // related_ids 用参数绑定（drizzle 数组展开为占位符），不做字符串拼接
+  // related_ids 存 R2，读取后解析
   let related: any[] = []
   try {
-    const ids = JSON.parse(article.relatedIds || '[]')
+    const ids = JSON.parse(r2Body?.relatedIds || '[]')
     if (Array.isArray(ids) && ids.length) {
       const idList = ids.slice(0, 6).map((i: any) => String(i)).filter(Boolean)
       if (idList.length) {
@@ -92,12 +96,12 @@ export default defineEventHandler(async (event) => {
 
   const parsed = {
     ...article,
-    content: safeJson(article.content),
+    content: safeJson(r2Body?.content ?? null),
     tags: safeJson(article.tags),
     links: linkRows,
-    friendLinks: safeJson(article.friendLinks),
-    relatedIds: safeJson(article.relatedIds),
-    faq: safeJson(article.faq),
+    friendLinks: safeJson(r2Body?.friendLinks ?? null),
+    relatedIds: safeJson(r2Body?.relatedIds ?? null),
+    faq: safeJson(r2Body?.faq ?? null),
   }
 
   return { article: parsed, status: gone ? 'gone' : 'live', related, favoriteCount: fav?.n ?? 0, favorited }

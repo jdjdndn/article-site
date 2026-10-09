@@ -25,7 +25,7 @@ export default defineNuxtConfig({
     '/sitemap.xml': { cache: { maxAge: 3600, swr: false, staleMaxAge: 0 } },
     '/feed.xml': { cache: { maxAge: 3600, swr: false, staleMaxAge: 0 } },
     '/favorites': { headers: { 'Cache-Control': 'no-store' } },
-    '/admin': { headers: { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' } },
+    '/admin/**': { headers: { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' } },
     '/api/**': { headers: { 'Cache-Control': 'no-store' } },
   },
 
@@ -40,11 +40,13 @@ export default defineNuxtConfig({
         { property: 'og:locale', content: 'zh_CN' },
         { property: 'og:site_name', content: 'AI 文章站' },
         { property: 'og:type', content: 'website' },
+        { property: 'og:url', content: 'https://www.wcbblll.cc' },
       ],
       link: [
         { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
         { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' },
         { rel: 'alternate', type: 'application/rss+xml', title: 'AI 文章站', href: '/feed.xml' },
+        { rel: 'canonical', href: 'https://www.wcbblll.cc' },
       ]
     }
   },
@@ -57,6 +59,7 @@ export default defineNuxtConfig({
     public: {
       // 页面端校验占位；真实鉴权在 server 端（server/api/admin/*）
       manageKey: '',
+      siteUrl: 'https://www.wcbblll.cc',
     }
   }
 })

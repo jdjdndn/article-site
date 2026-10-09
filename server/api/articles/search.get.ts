@@ -41,20 +41,20 @@ export default defineEventHandler(async (event) => {
     // trigram 子串匹配（引号包短语，去掉可能破坏 MATCH 语法的字符）
     const safe = keyword.replace(/"/g, '')
     const res = await db.run(
-      sql`SELECT a.id, a.title, a.summary, a.category, a.expires_at, a.updated_at, a.content,
+      sql`SELECT a.id, a.title, a.summary, a.category, a.expires_at, a.updated_at, a.first_image,
                  bm25(articles_fts) AS score
-          FROM articles_fts f
-          JOIN articles a ON a.rowid = f.rowid
-          WHERE ${sql.raw(base)} AND articles_fts MATCH ${'"' + safe + '"'}
-          ORDER BY score
-          LIMIT ${limit} OFFSET ${offset}`,
+           FROM articles_fts f
+           JOIN articles a ON a.rowid = f.rowid
+           WHERE ${sql.raw(base)} AND articles_fts MATCH ${'"' + safe + '"'}
+           ORDER BY score
+           LIMIT ${limit} OFFSET ${offset}`,
     )
     rows = res.results as any[]
   } else {
     // 短词降级 LIKE（2 字中文常用词）
     const like = `%${keyword}%`
     const res = await db.run(
-      sql`SELECT a.id, a.title, a.summary, a.category, a.expires_at, a.updated_at, a.content
+      sql`SELECT a.id, a.title, a.summary, a.category, a.expires_at, a.updated_at, a.first_image
           FROM articles a
           WHERE ${sql.raw(base)} AND (a.title LIKE ${like} OR a.summary LIKE ${like})
           ORDER BY a.updated_at DESC

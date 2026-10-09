@@ -4,6 +4,7 @@ import { requireAdmin } from '../../../utils/auth'
 import { useDb } from '../../../utils/db'
 import { articles } from '../../../db/schema'
 import { getAllArticleLinks } from '../../../utils/links'
+import { readArticleContent } from '../../../utils/r2'
 
 // GET /api/admin/articles/:id（Bearer 鉴权） —— 后台详情（任意状态，供编辑回填）
 export default defineEventHandler(async (event) => {
@@ -16,15 +17,16 @@ export default defineEventHandler(async (event) => {
   if (!article) throw createError({ statusCode: 404, statusMessage: '文章不存在' })
 
   const linkRows = await getAllArticleLinks(db, id)
+  const r2Body = await readArticleContent(id).catch(() => null)
   return {
     article: {
       ...article,
-      content: safeJson(article.content),
+      content: safeJson(r2Body?.content ?? null),
       tags: safeJson(article.tags),
       links: linkRows,
-      friendLinks: safeJson(article.friendLinks),
-      relatedIds: safeJson(article.relatedIds),
-      faq: safeJson(article.faq),
+      friendLinks: safeJson(r2Body?.friendLinks ?? null),
+      relatedIds: safeJson(r2Body?.relatedIds ?? null),
+      faq: safeJson(r2Body?.faq ?? null),
     },
   }
 })

@@ -5,8 +5,10 @@ import { articles } from '../../../db/schema'
 import { checkArticleSafety } from '../../../utils/content-safety'
 import { buildLinkStatements } from '../../../utils/links'
 import { firstImageOf, safeJson, normalizeJson } from '../../../utils/content'
+import { getSiteId, writeArticleContent } from '../../../utils/r2'
 
 // POST /api/admin/articles（Bearer 鉴权） —— 手动新增文章（表单 → JSON → 入库）
+// R2+D1 架构：D1 存元数据，正文 content/friendLinks/faq/relatedIds 存 R2
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const body = await readBody(event)
@@ -42,11 +44,11 @@ export default defineEventHandler(async (event) => {
   if (safetyHits.length > 0) status = 'draft'
 
   const db = useDb()
+  // D1：元数据 only
   const articleStmt = db.insert(articles).values({
     id,
     title: body.title.trim(),
     summary: typeof body.summary === 'string' ? body.summary : '',
-    content,
     firstImage: firstImageOf(safeJson(content)) || '',
     template: ['deal', 'guide', 'faq'].includes(body.template) ? body.template : 'default',
     category: body.category,
@@ -55,15 +57,20 @@ export default defineEventHandler(async (event) => {
     needsReview,
     publishAt,
     expiresAt: body.expiresAt ? String(body.expiresAt) : null,
-    links: '[]',
-    friendLinks: normalizeJson(body.friendLinks) ?? '[]',
-    relatedIds: normalizeJson(body.relatedIds) ?? '[]',
-    faq: normalizeJson(body.faq) ?? '[]',
+    siteId: getSiteId(),
     createdAt: now,
     updatedAt: now,
   })
   const linkStmts = buildLinkStatements(db, id, Array.isArray(body.links) ? body.links : [], now)
   await db.batch([articleStmt, ...linkStmts])
+
+  // R2：正文数据
+  await writeArticleContent(id, {
+    content,
+    friendLinks: normalizeJson(body.friendLinks) ?? '[]',
+    faq: normalizeJson(body.faq) ?? '[]',
+    relatedIds: normalizeJson(body.relatedIds) ?? '[]',
+  }).catch(() => {})
 
   return { id, ok: true, safetyHits }
 })

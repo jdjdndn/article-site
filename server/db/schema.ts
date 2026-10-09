@@ -1,12 +1,10 @@
 import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
-// 文章表（v14 计划数据模型）
-// content/links/tags 等 JSON 字段以字符串存储（D1/SQLite 无原生 JSON 列）
+// 文章表（R2+D1 统一架构：元数据存 D1，正文 content/links/friendLinks/faq/relatedIds 存 R2）
 export const articles = sqliteTable('articles', {
   id: text('id').primaryKey(),                    // 如 a-20260927-001
   title: text('title').notNull(),
   summary: text('summary').notNull().default(''),
-  content: text('content').notNull(),            // JSON 块数组，块类型见前台渲染：text/h2/list/price/quote/ad/image
   firstImage: text('first_image'),                 // content 首个 image 块 URL（列表/收藏缩略图免全量拉 content，节约带宽）
   template: text('template').notNull().default('default'), // default / deal（商品带货）/ guide（攻略）/ faq（问答）
   category: text('category').notNull().default(''),
@@ -15,10 +13,7 @@ export const articles = sqliteTable('articles', {
   needsReview: integer('needs_review').notNull().default(0), // 1=内容安全命中待人工审核（status 为 draft）
   publishAt: text('publish_at'),               // 定时发布时间（ISO），未到则保持 draft，到点 cron 自动发布
   expiresAt: text('expires_at'),                 // ISO 日期，到期自动置 expired
-  links: text('links').notNull().default('[]'),  // JSON: [{label, url}]
-  friendLinks: text('friend_links').notNull().default('[]'), // JSON: [{name, url}]
-  relatedIds: text('related_ids').notNull().default('[]'),   // JSON: ["a-xxx"]
-  faq: text('faq').notNull().default('[]'),      // JSON: [{q, a}]
+  siteId: text('site_id').notNull().default(''), // 多站共享 D1 时区分
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, (t) => [
@@ -26,6 +21,7 @@ export const articles = sqliteTable('articles', {
   index('idx_articles_status_updated').on(t.status, t.updatedAt),
   index('idx_articles_publish_at').on(t.publishAt),
   index('idx_articles_expires_at').on(t.expiresAt),
+  index('idx_articles_site_status').on(t.siteId, t.status),
 ])
 
 // 收藏（设备指纹免注册）

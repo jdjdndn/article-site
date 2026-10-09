@@ -3,6 +3,7 @@ import { articles, seeds, runLogs } from '../db/schema'
 import { checkArticleSafety } from './content-safety'
 import { buildLinkStatements } from './links'
 import { firstImageOf, safeJson, normalizeJson } from './content'
+import { getSiteId, writeArticleContent } from './r2'
 
 /**
  * 定时流水线 / 批量入库共享业务函数。
@@ -167,14 +168,17 @@ function sanitizeContent(contentStr: string): string {
 }
 
 // POST /api/admin/articles/batch 的语句构造（与 batch.post.ts 同构，含内容安全 + 链接整组重写）
+// R2+D1 架构：D1 存元数据，正文 content/friendLinks/faq/relatedIds 存 R2
 export function buildArticleStatements(db: any, list: any[]) {
   const baseNow = Date.now()
   const now = new Date(baseNow).toISOString()
   const d = new Date()
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
   const base = baseNow.toString().slice(-6)
+  const siteId = getSiteId()
 
   const stmts: any[] = []
+  const r2Writes: Array<{ id: string; data: any }> = []
   const results: Array<{ id?: string; ok: boolean; error?: string }> = []
   const safetyHits: Array<{ id: string; hits: any[] }> = []
 
@@ -202,11 +206,11 @@ export function buildArticleStatements(db: any, list: any[]) {
         safetyHits.push({ id, hits: safety.hits })
       }
 
+      // D1：元数据 only（content/friendLinks/faq/relatedIds 存 R2）
       stmts.push(db.insert(articles).values({
         id,
         title: a.title.trim(),
         summary: typeof a.summary === 'string' ? a.summary : '',
-        content,
         firstImage: firstImageOf(safeJson(content)) || '',
         template: ['deal', 'guide', 'faq'].includes(a.template) ? a.template : 'default',
         category: a.category,
@@ -215,30 +219,42 @@ export function buildArticleStatements(db: any, list: any[]) {
         needsReview,
         publishAt,
         expiresAt: a.expiresAt ? String(a.expiresAt) : null,
-        links: '[]',
-        friendLinks: normalizeJson(a.friendLinks) ?? '[]',
-        relatedIds: normalizeJson(a.relatedIds) ?? '[]',
-        faq: normalizeJson(a.faq) ?? '[]',
+        siteId,
         createdAt: new Date(baseNow + i).toISOString(),
         updatedAt: new Date(baseNow + i).toISOString(),
       }))
       stmts.push(...buildLinkStatements(db, id, cleanLinks, now))
+      // R2：正文数据
+      r2Writes.push({
+        id,
+        data: {
+          content,
+          friendLinks: normalizeJson(a.friendLinks) ?? '[]',
+          faq: normalizeJson(a.faq) ?? '[]',
+          relatedIds: normalizeJson(a.relatedIds) ?? '[]',
+        },
+      })
       results.push({ id, ok: true })
     } catch (e: any) {
       results.push({ ok: false, error: e?.message || '校验失败' })
     }
   })
 
-  return { stmts, results, safetyHits }
+  return { stmts, r2Writes, results, safetyHits }
 }
 
 // 批量入库并提交（返回与 API 同构的结果）
+// D1 batch 原子提交 + R2 正文写入
 export async function batchCreateArticlesDirect(db: any, list: any[]) {
-  const { stmts, results, safetyHits } = buildArticleStatements(db, list)
+  const { stmts, r2Writes, results, safetyHits } = buildArticleStatements(db, list)
   if (stmts.length > 0) {
     // D1 batch 原子提交；FTS 由 AFTER INSERT 触发器自动同步
     await db.batch(stmts as any)
   }
+  // R2 正文写入（D1 成功后；失败不阻塞，R2 最终一致性由读取兜底处理）
+  await Promise.all(
+    r2Writes.map((w) => writeArticleContent(w.id, w.data).catch(() => {})),
+  )
   return {
     ok: true,
     total: list.length,

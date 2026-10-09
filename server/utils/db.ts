@@ -21,33 +21,34 @@ export function useDb() {
 // - 三个触发器同步增删改（IF NOT EXISTS，避免重复创建）
 // - 存量回填为差量（只插入缺的 rowid，文章量大时冷启动不重建全表）
 // 注意：D1 的 FTS5 不支持 'delete' 命令语法，独立表删除必须用 DELETE WHERE rowid
+// R2+D1 架构：content 存 R2，FTS5 仅索引 title/summary/category（正文全文搜索降级为摘要搜索）
 export async function ensureFts() {
   const db = useDb()
   if (_ftsReady) return
   await db.run(`
     CREATE VIRTUAL TABLE IF NOT EXISTS articles_fts USING fts5(
-      title, summary, content, category,
+      title, summary, category,
       tokenize = 'trigram'
     );
     CREATE TRIGGER IF NOT EXISTS articles_fts_ai AFTER INSERT ON articles BEGIN
-      INSERT INTO articles_fts(rowid, title, summary, content, category)
-      VALUES (new.rowid, new.title, new.summary, new.content, new.category);
+      INSERT INTO articles_fts(rowid, title, summary, category)
+      VALUES (new.rowid, new.title, new.summary, new.category);
     END;
     CREATE TRIGGER IF NOT EXISTS articles_fts_ad AFTER DELETE ON articles BEGIN
       DELETE FROM articles_fts WHERE rowid = old.rowid;
     END;
     CREATE TRIGGER IF NOT EXISTS articles_fts_au AFTER UPDATE ON articles BEGIN
       DELETE FROM articles_fts WHERE rowid = old.rowid;
-      INSERT INTO articles_fts(rowid, title, summary, content, category)
-      VALUES (new.rowid, new.title, new.summary, new.content, new.category);
+      INSERT INTO articles_fts(rowid, title, summary, category)
+      VALUES (new.rowid, new.title, new.summary, new.category);
     END;
   `)
   // 差量回填：只补 articles 有而 fts 缺的 rowid（新文章/上次未回填部分）。
   // 限定近 7 天更新：触发器已保证新写自动入 fts，历史缺行只会在建表瞬间产生，
   // 避免文章量大后每次 isolate 冷启动的首次搜索全表 LEFT JOIN 扫全库。
   await db.run(`
-    INSERT INTO articles_fts(rowid, title, summary, content, category)
-    SELECT a.rowid, a.title, a.summary, a.content, a.category
+    INSERT INTO articles_fts(rowid, title, summary, category)
+    SELECT a.rowid, a.title, a.summary, a.category
     FROM articles a
     LEFT JOIN articles_fts f ON f.rowid = a.rowid
     WHERE f.rowid IS NULL AND a.updated_at > datetime('now', '-7 days');
@@ -56,3 +57,4 @@ export async function ensureFts() {
 }
 
 export { schema }
+export { getSiteId } from './r2'

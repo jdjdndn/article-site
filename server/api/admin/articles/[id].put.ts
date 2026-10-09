@@ -7,8 +7,10 @@ import { checkArticleSafety } from '../../../utils/content-safety'
 import { buildLinkStatements } from '../../../utils/links'
 import { purgeArticle } from '../../../utils/cache'
 import { firstImageOf, safeJson, normalizeJson } from '../../../utils/content'
+import { writeArticleContent } from '../../../utils/r2'
 
 // PUT /api/admin/articles/:id（Bearer 鉴权） —— 修改文章（整篇覆盖，表单回填）
+// R2+D1 架构：D1 存元数据，正文 content/friendLinks/faq/relatedIds 存 R2
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const id = getRouterParam(event, 'id')
@@ -39,10 +41,10 @@ export default defineEventHandler(async (event) => {
   const needsReview = safetyHits.length > 0 ? 1 : 0
   if (safetyHits.length > 0) status = 'draft'
 
+  // D1：元数据 only
   const updateStmt = db.update(articles).set({
     title: body.title.trim(),
     summary: typeof body.summary === 'string' ? body.summary : '',
-    content,
     firstImage: firstImageOf(safeJson(content)) || '',
     template: ['deal', 'guide', 'faq'].includes(body.template) ? body.template : 'default',
     category: body.category,
@@ -51,14 +53,18 @@ export default defineEventHandler(async (event) => {
     needsReview,
     publishAt,
     expiresAt: body.expiresAt ? String(body.expiresAt) : null,
-    links: '[]',
-    friendLinks: normalizeJson(body.friendLinks) ?? '[]',
-    relatedIds: normalizeJson(body.relatedIds) ?? '[]',
-    faq: normalizeJson(body.faq) ?? '[]',
     updatedAt: now,
   }).where(eq(articles.id, id))
   const linkStmts = buildLinkStatements(db, id, Array.isArray(body.links) ? body.links : [], now)
   await db.batch([updateStmt, ...linkStmts])
+
+  // R2：正文数据
+  await writeArticleContent(id, {
+    content,
+    friendLinks: normalizeJson(body.friendLinks) ?? '[]',
+    faq: normalizeJson(body.faq) ?? '[]',
+    relatedIds: normalizeJson(body.relatedIds) ?? '[]',
+  }).catch(() => {})
 
   // 定点失效边缘缓存（详情页 + 首页），失败最多延迟 TTL
   await purgeArticle(id)

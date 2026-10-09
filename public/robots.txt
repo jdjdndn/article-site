@@ -1,6 +1,8 @@
 # 默认：全部放行
 User-Agent: *
 Allow: /
+Disallow: /admin
+Disallow: /api
 
 # ---- AI 生成式引擎爬虫（GEO：显式放行，不屏蔽）----
 User-Agent: GPTBot
@@ -20,8 +22,5 @@ Allow: /
 
 User-Agent: Google-Extended
 Allow: /
-
-# 后台不收录
-Disallow: /admin
 
 Sitemap: https://www.wcbblll.cc/sitemap.xml

@@ -13,10 +13,19 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_id": "9051caef-e987-4a47-ae8c-2f91496b1a82",
-      "database_name": "article-db"
+      "database_id": "213282db-7a3a-490c-b653-964001df9109",
+      "database_name": "article-site-db"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "ARTICLES_R2",
+      "bucket_name": "article-site-articles"
+    }
+  ],
+  "vars": {
+    "SITE_ID": "article-site"
+  },
   "ai": {
     "binding": "AI"
   },
