@@ -1,0 +1,6 @@
+[submodule "vendor/ai-article-pipeline"]
+	path = vendor/ai-article-pipeline
+	url = E:/code/auto-ai-article
+[submodule "vendor/seo-optimizer"]
+	path = vendor/seo-optimizer
+	url = E:/code/seo-optimizer
